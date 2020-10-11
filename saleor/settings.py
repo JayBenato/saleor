@@ -43,6 +43,7 @@ WSGI_APPLICATION = "saleor.wsgi.application"
 
 ADMINS = (
     # ('Your Name', 'your_email@example.com'),
+    ('Juglair Benato', 'j.benato@gmail.com')
 )
 MANAGERS = ADMINS
 
@@ -71,55 +72,8 @@ DATABASES = {
 TIME_ZONE = "UTC"
 LANGUAGE_CODE = "en"
 LANGUAGES = [
-    ("ar", "Arabic"),
-    ("az", "Azerbaijani"),
-    ("bg", "Bulgarian"),
-    ("bn", "Bengali"),
-    ("ca", "Catalan"),
-    ("cs", "Czech"),
-    ("da", "Danish"),
-    ("de", "German"),
-    ("el", "Greek"),
     ("en", "English"),
-    ("es", "Spanish"),
-    ("es-co", "Colombian Spanish"),
-    ("et", "Estonian"),
-    ("fa", "Persian"),
-    ("fi", "Finnish"),
-    ("fr", "French"),
-    ("hi", "Hindi"),
-    ("hu", "Hungarian"),
-    ("hy", "Armenian"),
-    ("id", "Indonesian"),
-    ("is", "Icelandic"),
     ("it", "Italian"),
-    ("ja", "Japanese"),
-    ("ka", "Georgian"),
-    ("km", "Khmer"),
-    ("ko", "Korean"),
-    ("lt", "Lithuanian"),
-    ("mn", "Mongolian"),
-    ("my", "Burmese"),
-    ("nb", "Norwegian"),
-    ("nl", "Dutch"),
-    ("pl", "Polish"),
-    ("pt", "Portuguese"),
-    ("pt-br", "Brazilian Portuguese"),
-    ("ro", "Romanian"),
-    ("ru", "Russian"),
-    ("sk", "Slovak"),
-    ("sl", "Slovenian"),
-    ("sq", "Albanian"),
-    ("sr", "Serbian"),
-    ("sv", "Swedish"),
-    ("sw", "Swahili"),
-    ("ta", "Tamil"),
-    ("th", "Thai"),
-    ("tr", "Turkish"),
-    ("uk", "Ukrainian"),
-    ("vi", "Vietnamese"),
-    ("zh-hans", "Simplified Chinese"),
-    ("zh-hant", "Traditional Chinese"),
 ]
 LOCALE_PATHS = [os.path.join(PROJECT_ROOT, "locale")]
 USE_I18N = True
@@ -353,8 +307,8 @@ AUTH_PASSWORD_VALIDATORS = [
     }
 ]
 
-DEFAULT_COUNTRY = os.environ.get("DEFAULT_COUNTRY", "US")
-DEFAULT_CURRENCY = os.environ.get("DEFAULT_CURRENCY", "USD")
+DEFAULT_COUNTRY = os.environ.get("DEFAULT_COUNTRY", "IT")
+DEFAULT_CURRENCY = os.environ.get("DEFAULT_CURRENCY", "EUR")
 DEFAULT_DECIMAL_PLACES = 3
 DEFAULT_MAX_DIGITS = 12
 DEFAULT_CURRENCY_CODE_LENGTH = 3
@@ -519,6 +473,7 @@ PLUGINS = [
     "saleor.payment.gateways.razorpay.plugin.RazorpayGatewayPlugin",
     "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
     "saleor.plugins.invoicing.plugin.InvoicingPlugin",
+    "saleor.plugins.danea.plugin.DaneaPlugin",
 ]
 
 # Plugin discovery
