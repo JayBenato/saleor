@@ -43,6 +43,7 @@ WSGI_APPLICATION = "saleor.wsgi.application"
 
 ADMINS = (
     # ('Your Name', 'your_email@example.com'),
+    ('Juglair Benato', 'j.benato@gmail.com')
 )
 MANAGERS = ADMINS
 
@@ -94,11 +95,9 @@ LANGUAGES = [
     ("is", "Icelandic"),
     ("it", "Italian"),
     ("ja", "Japanese"),
-    ("km", "Khmer"),
     ("ko", "Korean"),
     ("lt", "Lithuanian"),
     ("mn", "Mongolian"),
-    ("my", "Burmese"),
     ("nb", "Norwegian"),
     ("nl", "Dutch"),
     ("pl", "Polish"),
@@ -352,8 +351,8 @@ AUTH_PASSWORD_VALIDATORS = [
     }
 ]
 
-DEFAULT_COUNTRY = os.environ.get("DEFAULT_COUNTRY", "US")
-DEFAULT_CURRENCY = os.environ.get("DEFAULT_CURRENCY", "USD")
+DEFAULT_COUNTRY = os.environ.get("DEFAULT_COUNTRY", "IT")
+DEFAULT_CURRENCY = os.environ.get("DEFAULT_CURRENCY", "EUR")
 DEFAULT_DECIMAL_PLACES = 3
 DEFAULT_MAX_DIGITS = 12
 DEFAULT_CURRENCY_CODE_LENGTH = 3
@@ -518,6 +517,7 @@ PLUGINS = [
     "saleor.payment.gateways.razorpay.plugin.RazorpayGatewayPlugin",
     "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
     "saleor.plugins.invoicing.plugin.InvoicingPlugin",
+    "saleor.plugins.danea.plugin.DaneaPlugin",
 ]
 
 # Plugin discovery

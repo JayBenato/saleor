@@ -19,3 +19,6 @@ class PluginConfiguration(models.Model):
 
     def __str__(self):
         return f"Configuration of {self.name}, active: {self.active}"
+
+class DaneaOrder(models.Model):
+    saleor_order_id = models.CharField(max_length=250)
