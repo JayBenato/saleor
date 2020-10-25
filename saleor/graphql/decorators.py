@@ -2,12 +2,25 @@ from enum import Enum
 from functools import wraps
 from typing import Iterable, Union
 
-from graphql_jwt import exceptions
-from graphql_jwt.decorators import context
+from graphql.execution.base import ResolveInfo
+
+from ..core.exceptions import PermissionDenied
+from ..core.permissions import AccountPermissions
+
+
+def context(f):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            info = next(arg for arg in args if isinstance(arg, ResolveInfo))
+            return func(info.context, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def account_passes_test(test_func):
-    """Determine if user/service_account has permission to access to content."""
+    """Determine if user/app has permission to access to content."""
 
     def decorator(f):
         @wraps(f)
@@ -15,7 +28,7 @@ def account_passes_test(test_func):
         def wrapper(context, *args, **kwargs):
             if test_func(context):
                 return f(*args, **kwargs)
-            raise exceptions.PermissionDenied()
+            raise PermissionDenied()
 
         return wrapper
 
@@ -25,9 +38,12 @@ def account_passes_test(test_func):
 def _permission_required(perms: Iterable[Enum], context):
     if context.user.has_perms(perms):
         return True
-    service_account = getattr(context, "service_account", None)
-    if service_account and service_account.has_perms(perms):
-        return True
+    app = getattr(context, "app", None)
+    if app:
+        # for now MANAGE_STAFF permission for app is not supported
+        if AccountPermissions.MANAGE_STAFF in perms:
+            return False
+        return app.has_perms(perms)
     return False
 
 
@@ -51,3 +67,8 @@ def one_of_permissions_required(perms: Iterable[Enum]):
         return False
 
     return account_passes_test(check_perms)
+
+
+staff_member_required = account_passes_test(
+    lambda context: context.user.is_active and context.user.is_staff
+)

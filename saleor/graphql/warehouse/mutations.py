@@ -6,11 +6,14 @@ from ...warehouse import models
 from ...warehouse.error_codes import WarehouseErrorCode
 from ...warehouse.validation import validate_warehouse_count  # type: ignore
 from ..account.i18n import I18nMixin
-from ..core.mutations import ModelBulkDeleteMutation, ModelDeleteMutation, ModelMutation
-from ..core.types.common import StockError, WarehouseError
-from ..core.utils import validate_slug_and_generate_if_needed
+from ..core.mutations import ModelDeleteMutation, ModelMutation
+from ..core.types.common import WarehouseError
+from ..core.utils import (
+    validate_required_string_field,
+    validate_slug_and_generate_if_needed,
+)
 from ..shipping.types import ShippingZone
-from .types import StockInput, Warehouse, WarehouseCreateInput, WarehouseUpdateInput
+from .types import Warehouse, WarehouseCreateInput, WarehouseUpdateInput
 
 ADDRESS_FIELDS = [
     "street_address_1",
@@ -35,6 +38,14 @@ class WarehouseMixin:
         except ValidationError as error:
             error.code = WarehouseErrorCode.REQUIRED.value
             raise ValidationError({"slug": error})
+
+        if "name" in cleaned_input:
+            try:
+                cleaned_input = validate_required_string_field(cleaned_input, "name")
+            except ValidationError as error:
+                error.code = WarehouseErrorCode.REQUIRED.value
+                raise ValidationError({"name": error})
+
         shipping_zones = cleaned_input.get("shipping_zones", [])
         if not validate_warehouse_count(shipping_zones, instance):
             msg = "Shipping zone can be assigned only to one warehouse."
@@ -69,10 +80,6 @@ class WarehouseCreate(WarehouseMixin, ModelMutation, I18nMixin):
 
 
 class WarehouseShippingZoneAssign(WarehouseMixin, ModelMutation, I18nMixin):
-    warehouse = graphene.Field(
-        Warehouse, description="A warehouse to add shipping zone."
-    )
-
     class Meta:
         model = models.Warehouse
         permissions = (ProductPermissions.MANAGE_PRODUCTS,)
@@ -99,10 +106,6 @@ class WarehouseShippingZoneAssign(WarehouseMixin, ModelMutation, I18nMixin):
 
 
 class WarehouseShippingZoneUnassign(WarehouseMixin, ModelMutation, I18nMixin):
-    warehouse = graphene.Field(
-        Warehouse, description="A warehouse to add shipping zone."
-    )
-
     class Meta:
         model = models.Warehouse
         permissions = (ProductPermissions.MANAGE_PRODUCTS,)
@@ -162,56 +165,3 @@ class WarehouseDelete(ModelDeleteMutation):
 
     class Arguments:
         id = graphene.ID(description="ID of a warehouse to delete.", required=True)
-
-
-class StockCreate(ModelMutation):
-    class Arguments:
-        input = StockInput(
-            required=True, description="Fields required to create stock."
-        )
-
-    class Meta:
-        description = "Creates new stock."
-        model = models.Stock
-        permissions = (ProductPermissions.MANAGE_PRODUCTS,)
-        error_type_class = StockError
-        error_type_field = "stock_errors"
-
-
-class StockUpdate(ModelMutation):
-    class Arguments:
-        input = StockInput(
-            required=True, description="Fields required to update stock."
-        )
-        id = graphene.ID(required=True, description="ID of stock to update.")
-
-    class Meta:
-        model = models.Stock
-        permissions = (ProductPermissions.MANAGE_PRODUCTS,)
-        description = "Update given stock."
-        error_type_class = StockError
-        error_type_field = "stock_error"
-
-
-class StockDelete(ModelDeleteMutation):
-    class Arguments:
-        id = graphene.ID(required=True, description="ID of stock to delete.")
-
-    class Meta:
-        model = models.Stock
-        permissions = (ProductPermissions.MANAGE_PRODUCTS,)
-        description = "Deletes selected stock."
-        erorr_type_class = StockError
-        error_type_field = "stock_error"
-
-
-class StockBulkDelete(ModelBulkDeleteMutation):
-    class Arguments:
-        ids = graphene.List(graphene.ID, required=True)
-
-    class Meta:
-        model = models.Stock
-        permissions = (ProductPermissions.MANAGE_PRODUCTS,)
-        description = "Deletes stocks in bulk"
-        error_type_class = StockError
-        error_type_field = "stock_error"

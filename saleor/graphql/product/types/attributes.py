@@ -1,17 +1,17 @@
 import re
 
 import graphene
-import graphene_django_optimizer as gql_optimizer
 from graphene import relay
 
 from ....core.permissions import ProductPermissions
 from ....product import models
 from ...core.connection import CountableDjangoObjectType
-from ...core.resolvers import resolve_meta, resolve_private_meta
-from ...core.types import MetadataObjectType
 from ...decorators import permission_required
+from ...meta.deprecated.resolvers import resolve_meta, resolve_private_meta
+from ...meta.types import ObjectWithMetadata
 from ...translations.fields import TranslationField
 from ...translations.types import AttributeTranslation, AttributeValueTranslation
+from ..dataloaders import AttributeValuesByAttributeIdLoader
 from ..descriptions import AttributeDescriptions, AttributeValueDescriptions
 from ..enums import AttributeInputTypeEnum, AttributeValueType
 
@@ -32,15 +32,17 @@ def resolve_attribute_value_type(attribute_value):
 class AttributeValue(CountableDjangoObjectType):
     name = graphene.String(description=AttributeValueDescriptions.NAME)
     slug = graphene.String(description=AttributeValueDescriptions.SLUG)
-    type = AttributeValueType(description=AttributeValueDescriptions.TYPE)
+    type = AttributeValueType(
+        description=AttributeValueDescriptions.TYPE,
+        deprecation_reason=(
+            "Use the `inputType` field to determine the type of attribute's value. "
+            "This field will be removed after 2020-07-31."
+        ),
+    )
     translation = TranslationField(
         AttributeValueTranslation, type_name="attribute value"
     )
-
-    input_type = gql_optimizer.field(
-        AttributeInputTypeEnum(description=AttributeDescriptions.INPUT_TYPE),
-        model_field="attribute",
-    )
+    input_type = AttributeInputTypeEnum(description=AttributeDescriptions.INPUT_TYPE)
 
     class Meta:
         description = "Represents a value of an attribute."
@@ -58,16 +60,13 @@ class AttributeValue(CountableDjangoObjectType):
         return root.input_type
 
 
-class Attribute(CountableDjangoObjectType, MetadataObjectType):
+class Attribute(CountableDjangoObjectType):
     input_type = AttributeInputTypeEnum(description=AttributeDescriptions.INPUT_TYPE)
 
     name = graphene.String(description=AttributeDescriptions.NAME)
     slug = graphene.String(description=AttributeDescriptions.SLUG)
 
-    values = gql_optimizer.field(
-        graphene.List(AttributeValue, description=AttributeDescriptions.VALUES),
-        model_field="values",
-    )
+    values = graphene.List(AttributeValue, description=AttributeDescriptions.VALUES)
 
     value_required = graphene.Boolean(
         description=AttributeDescriptions.VALUE_REQUIRED, required=True
@@ -97,20 +96,20 @@ class Attribute(CountableDjangoObjectType, MetadataObjectType):
             "variants at the product type level."
         )
         only_fields = ["id", "product_types", "product_variant_types"]
-        interfaces = [relay.Node]
+        interfaces = [relay.Node, ObjectWithMetadata]
         model = models.Attribute
 
     @staticmethod
-    def resolve_values(root: models.Attribute, *_args):
-        return root.values.all()
+    def resolve_values(root: models.Attribute, info):
+        return AttributeValuesByAttributeIdLoader(info.context).load(root.id)
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_private_meta(root, _info):
+    def resolve_private_meta(root: models.Attribute, _info):
         return resolve_private_meta(root, _info)
 
     @staticmethod
-    def resolve_meta(root, _info):
+    def resolve_meta(root: models.Attribute, _info):
         return resolve_meta(root, _info)
 
     @staticmethod
@@ -164,8 +163,8 @@ class AttributeInput(graphene.InputObjectType):
     value = graphene.String(
         required=False,
         description=(
-            "Internal representation of a value (unique per attribute). "
-            "DEPRECATED: Will be removed in Saleor 2.11"
+            "[Deprecated] Internal representation of a value (unique per attribute). "
+            "This field will be removed after 2020-07-31."
         ),
     )  # deprecated
     values = graphene.List(

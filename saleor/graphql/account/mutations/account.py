@@ -1,23 +1,23 @@
 import graphene
+import jwt
 from django.conf import settings
+from django.contrib.auth import password_validation
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 
 from ....account import emails, events as account_events, models, utils
 from ....account.error_codes import AccountErrorCode
-from ....account.utils import create_jwt_token, decode_jwt_token
 from ....checkout import AddressType
+from ....core.jwt import create_token, jwt_decode
 from ....core.utils.url import validate_storefront_url
+from ....settings import JWT_TTL_REQUEST_EMAIL_CHANGE
 from ...account.enums import AddressTypeEnum
 from ...account.types import Address, AddressInput, User
-from ...core.mutations import (
-    BaseMutation,
-    ModelDeleteMutation,
-    ModelMutation,
-    UpdateMetaBaseMutation,
-)
-from ...core.types import MetaInput
+from ...core.mutations import BaseMutation, ModelDeleteMutation, ModelMutation
 from ...core.types.common import AccountError
+from ...meta.deprecated.mutations import UpdateMetaBaseMutation
+from ...meta.deprecated.types import MetaInput
+from ..i18n import I18nMixin
 from .base import (
     INVALID_TOKEN,
     BaseAddressDelete,
@@ -57,10 +57,7 @@ class AccountRegister(ModelMutation):
     @classmethod
     def mutate(cls, root, info, **data):
         response = super().mutate(root, info, **data)
-        if not response.errors:
-            response.requires_confirmation = (
-                settings.ENABLE_ACCOUNT_CONFIRMATION_BY_EMAIL
-            )
+        response.requires_confirmation = settings.ENABLE_ACCOUNT_CONFIRMATION_BY_EMAIL
         return response
 
     @classmethod
@@ -69,16 +66,29 @@ class AccountRegister(ModelMutation):
             return super().clean_input(info, instance, data, input_cls=None)
         elif not data.get("redirect_url"):
             raise ValidationError(
-                {"redirect_url": "This field is required."},
-                code=AccountErrorCode.INVALID,
+                {
+                    "redirect_url": ValidationError(
+                        "This field is required.", code=AccountErrorCode.REQUIRED
+                    )
+                }
             )
 
         try:
             validate_storefront_url(data["redirect_url"])
         except ValidationError as error:
             raise ValidationError(
-                {"redirect_url": error}, code=AccountErrorCode.INVALID
+                {
+                    "redirect_url": ValidationError(
+                        error.message, code=AccountErrorCode.INVALID
+                    )
+                }
             )
+
+        password = data["password"]
+        try:
+            password_validation.validate_password(password, instance)
+        except ValidationError as error:
+            raise ValidationError({"password": error})
 
         return super().clean_input(info, instance, data, input_cls=None)
 
@@ -93,7 +103,7 @@ class AccountRegister(ModelMutation):
         else:
             user.save()
         account_events.customer_account_created_event(user=user)
-        info.context.extensions.customer_created(customer=user)
+        info.context.plugins.customer_created(customer=user)
 
 
 class AccountInput(graphene.InputObjectType):
@@ -216,7 +226,7 @@ class AccountDelete(ModelDeleteMutation):
         return cls.success_response(user)
 
 
-class AccountAddressCreate(ModelMutation):
+class AccountAddressCreate(ModelMutation, I18nMixin):
     user = graphene.Field(
         User, description="A user instance for which the address was created."
     )
@@ -246,14 +256,18 @@ class AccountAddressCreate(ModelMutation):
 
     @classmethod
     def perform_mutation(cls, root, info, **data):
-        success_response = super().perform_mutation(root, info, **data)
         address_type = data.get("type", None)
         user = info.context.user
-        success_response.user = user
+        cleaned_input = cls.clean_input(
+            info=info, instance=Address(), data=data.get("input")
+        )
+        address = cls.validate_address(cleaned_input)
+        cls.clean_instance(info, address)
+        cls.save(info, address, cleaned_input)
+        cls._save_m2m(info, address, cleaned_input)
         if address_type:
-            instance = success_response.address
-            utils.change_user_default_address(user, instance, address_type)
-        return success_response
+            utils.change_user_default_address(user, address, address_type)
+        return AccountAddressCreate(user=user, address=address)
 
     @classmethod
     def save(cls, info, instance, cleaned_input):
@@ -376,8 +390,9 @@ class RequestEmailChange(BaseMutation):
         if not user.check_password(password):
             raise ValidationError(
                 {
-                    "user_password": ValidationError(
-                        "Password isn't valid.", code=AccountErrorCode.INVALID_PASSWORD
+                    "password": ValidationError(
+                        "Password isn't valid.",
+                        code=AccountErrorCode.INVALID_CREDENTIALS,
                     )
                 }
             )
@@ -395,12 +410,12 @@ class RequestEmailChange(BaseMutation):
             raise ValidationError(
                 {"redirect_url": error}, code=AccountErrorCode.INVALID
             )
-        token_kwargs = {
+        token_payload = {
             "old_email": user.email,
             "new_email": new_email,
             "user_pk": user.pk,
         }
-        token = create_jwt_token(token_kwargs)
+        token = create_token(token_payload, JWT_TTL_REQUEST_EMAIL_CHANGE)
         emails.send_user_change_email_url(redirect_url, user, new_email, token)
         return RequestEmailChange(user=user)
 
@@ -423,12 +438,28 @@ class ConfirmEmailChange(BaseMutation):
         return context.user.is_authenticated
 
     @classmethod
+    def get_token_payload(cls, token):
+        try:
+            payload = jwt_decode(token)
+        except jwt.PyJWTError:
+            raise ValidationError(
+                {
+                    "token": ValidationError(
+                        "Invalid or expired token.",
+                        code=AccountErrorCode.JWT_INVALID_TOKEN,
+                    )
+                }
+            )
+        return payload
+
+    @classmethod
     def perform_mutation(cls, _root, info, **data):
         user = info.context.user
         token = data["token"]
-        decoded_token = decode_jwt_token(token)
-        new_email = decoded_token["new_email"]
-        old_email = decoded_token["old_email"]
+
+        payload = cls.get_token_payload(token)
+        new_email = payload["new_email"]
+        old_email = payload["old_email"]
 
         if models.User.objects.filter(email=new_email).exists():
             raise ValidationError(

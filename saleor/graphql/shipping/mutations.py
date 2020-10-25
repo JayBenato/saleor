@@ -1,24 +1,30 @@
 import graphene
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from ...core.permissions import ShippingPermissions
 from ...shipping import models
 from ...shipping.error_codes import ShippingErrorCode
-from ...shipping.utils import default_shipping_zone_exists
+from ...shipping.utils import (
+    default_shipping_zone_exists,
+    get_countries_without_shipping_zone,
+)
 from ..core.mutations import BaseMutation, ModelDeleteMutation, ModelMutation
-from ..core.scalars import Decimal, WeightScalar
+from ..core.scalars import PositiveDecimal, WeightScalar
 from ..core.types.common import ShippingError
+from ..core.utils import get_duplicates_ids
+from ..core.validators import validate_price_precision
 from .enums import ShippingMethodTypeEnum
 from .types import ShippingMethod, ShippingZone
 
 
 class ShippingPriceInput(graphene.InputObjectType):
     name = graphene.String(description="Name of the shipping method.")
-    price = Decimal(description="Shipping price of the shipping method.")
-    minimum_order_price = Decimal(
+    price = PositiveDecimal(description="Shipping price of the shipping method.")
+    minimum_order_price = PositiveDecimal(
         description="Minimum order price to use this shipping method."
     )
-    maximum_order_price = Decimal(
+    maximum_order_price = PositiveDecimal(
         description="Maximum order price to use this shipping method."
     )
     minimum_order_weight = WeightScalar(
@@ -33,7 +39,7 @@ class ShippingPriceInput(graphene.InputObjectType):
     )
 
 
-class ShippingZoneInput(graphene.InputObjectType):
+class ShippingZoneCreateInput(graphene.InputObjectType):
     name = graphene.String(
         description="Shipping zone's name. Visible only to the staff."
     )
@@ -46,35 +52,79 @@ class ShippingZoneInput(graphene.InputObjectType):
             "zones."
         )
     )
+    add_warehouses = graphene.List(
+        graphene.ID, description="List of warehouses to assign to a shipping zone",
+    )
+
+
+class ShippingZoneUpdateInput(ShippingZoneCreateInput):
+    remove_warehouses = graphene.List(
+        graphene.ID, description="List of warehouses to unassign from a shipping zone",
+    )
 
 
 class ShippingZoneMixin:
     @classmethod
     def clean_input(cls, info, instance, data, input_cls=None):
+        duplicates_ids = get_duplicates_ids(
+            data.get("add_warehouses"), data.get("remove_warehouses")
+        )
+        if duplicates_ids:
+            error_msg = (
+                "The same object cannot be in both lists "
+                "for adding and removing items."
+            )
+            raise ValidationError(
+                {
+                    "removeWarehouses": ValidationError(
+                        error_msg,
+                        code=ShippingErrorCode.DUPLICATED_INPUT_ITEM.value,
+                        params={"warehouses": list(duplicates_ids)},
+                    )
+                }
+            )
+
         cleaned_input = super().clean_input(info, instance, data)
-        default = cleaned_input.get("default")
+        cleaned_input = cls.clean_default(instance, cleaned_input)
+        return cleaned_input
+
+    @classmethod
+    def clean_default(cls, instance, data):
+        default = data.get("default")
         if default:
             if default_shipping_zone_exists(instance.pk):
                 raise ValidationError(
                     {
                         "default": ValidationError(
                             "Default shipping zone already exists.",
-                            code=ShippingErrorCode.ALREADY_EXISTS,
+                            code=ShippingErrorCode.ALREADY_EXISTS.value,
                         )
                     }
                 )
-            elif cleaned_input.get("countries"):
-                cleaned_input["countries"] = []
+            else:
+                countries = get_countries_without_shipping_zone()
+                data["countries"] = countries
         else:
-            cleaned_input["default"] = False
-        return cleaned_input
+            data["default"] = False
+        return data
+
+    @classmethod
+    @transaction.atomic
+    def _save_m2m(cls, info, instance, cleaned_data):
+        super()._save_m2m(info, instance, cleaned_data)
+
+        add_warehouses = cleaned_data.get("add_warehouses")
+        if add_warehouses:
+            instance.warehouses.add(*add_warehouses)
+
+        remove_warehouses = cleaned_data.get("remove_warehouses")
+        if remove_warehouses:
+            instance.warehouses.remove(*remove_warehouses)
 
 
 class ShippingZoneCreate(ShippingZoneMixin, ModelMutation):
-    shipping_zone = graphene.Field(ShippingZone, description="Created shipping zone.")
-
     class Arguments:
-        input = ShippingZoneInput(
+        input = ShippingZoneCreateInput(
             description="Fields required to create a shipping zone.", required=True
         )
 
@@ -87,11 +137,9 @@ class ShippingZoneCreate(ShippingZoneMixin, ModelMutation):
 
 
 class ShippingZoneUpdate(ShippingZoneMixin, ModelMutation):
-    shipping_zone = graphene.Field(ShippingZone, description="Updated shipping zone.")
-
     class Arguments:
         id = graphene.ID(description="ID of a shipping zone to update.", required=True)
-        input = ShippingZoneInput(
+        input = ShippingZoneUpdateInput(
             description="Fields required to update a shipping zone.", required=True
         )
 
@@ -123,6 +171,11 @@ class ShippingPriceMixin:
         # Rename the price field to price_amount (the model's)
         price_amount = cleaned_input.pop("price", None)
         if price_amount is not None:
+            try:
+                validate_price_precision(price_amount, instance.currency)
+            except ValidationError as error:
+                error.code = ShippingErrorCode.INVALID.value
+                raise ValidationError({"price": error})
             cleaned_input["price_amount"] = price_amount
 
         cleaned_type = cleaned_input.get("type")
@@ -132,9 +185,19 @@ class ShippingPriceMixin:
                 max_price = cleaned_input.pop("maximum_order_price", None)
 
                 if min_price is not None:
+                    try:
+                        validate_price_precision(min_price, instance.currency)
+                    except ValidationError as error:
+                        error.code = ShippingErrorCode.INVALID.value
+                        raise ValidationError({"minimum_order_price": error})
                     cleaned_input["minimum_order_price_amount"] = min_price
 
                 if max_price is not None:
+                    try:
+                        validate_price_precision(max_price, instance.currency)
+                    except ValidationError as error:
+                        error.code = ShippingErrorCode.INVALID.value
+                        raise ValidationError({"maximum_order_price": error})
                     cleaned_input["maximum_order_price_amount"] = max_price
 
                 if (
@@ -156,6 +219,27 @@ class ShippingPriceMixin:
             else:
                 min_weight = cleaned_input.get("minimum_order_weight")
                 max_weight = cleaned_input.get("maximum_order_weight")
+
+                if min_weight and min_weight.value < 0:
+                    raise ValidationError(
+                        {
+                            "minimum_order_weight": ValidationError(
+                                "Shipping can't have negative weight.",
+                                code=ShippingErrorCode.INVALID,
+                            )
+                        }
+                    )
+
+                if max_weight and max_weight.value < 0:
+                    raise ValidationError(
+                        {
+                            "maximum_order_weight": ValidationError(
+                                "Shipping can't have negative weight.",
+                                code=ShippingErrorCode.INVALID,
+                            )
+                        }
+                    )
+
                 if (
                     min_weight is not None
                     and max_weight is not None
@@ -192,6 +276,7 @@ class ShippingPriceCreate(ShippingPriceMixin, ModelMutation):
         permissions = (ShippingPermissions.MANAGE_SHIPPING,)
         error_type_class = ShippingError
         error_type_field = "shipping_errors"
+        errors_mapping = {"price_amount": "price"}
 
     @classmethod
     def success_response(cls, instance):
@@ -218,6 +303,7 @@ class ShippingPriceUpdate(ShippingPriceMixin, ModelMutation):
         permissions = (ShippingPermissions.MANAGE_SHIPPING,)
         error_type_class = ShippingError
         error_type_field = "shipping_errors"
+        errors_mapping = {"price_amount": "price"}
 
     @classmethod
     def success_response(cls, instance):

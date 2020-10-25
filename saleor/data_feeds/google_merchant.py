@@ -8,10 +8,12 @@ from django.contrib.syndication.views import add_domain
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.utils.encoding import smart_text
+from django_countries.fields import Country
 
-from ..core.taxes import zero_money
+from ..core.taxes import charge_taxes_on_shipping
 from ..discount import DiscountInfo
 from ..discount.utils import fetch_discounts
+from ..plugins.manager import get_plugins_manager
 from ..product.models import Attribute, AttributeValue, Category, ProductVariant
 from ..warehouse.availability import is_variant_in_stock
 
@@ -24,7 +26,6 @@ ATTRIBUTES = [
     "title",
     "product_type",
     "google_product_category",
-    "link",
     "image_link",
     "condition",
     "availability",
@@ -69,10 +70,6 @@ def item_mpn(item: ProductVariant):
 
 def item_guid(item: ProductVariant):
     return item.sku
-
-
-def item_link(item: ProductVariant, current_site):
-    return add_domain(current_site.domain, item.get_absolute_url(), not settings.DEBUG)
 
 
 def item_title(item: ProductVariant):
@@ -121,15 +118,25 @@ def item_brand(item: ProductVariant, attributes_dict, attribute_values_dict):
     return brand
 
 
-def item_tax(item: ProductVariant, discounts: Iterable[DiscountInfo]):
+def item_tax(
+    item: ProductVariant,
+    discounts: Iterable[DiscountInfo],
+    is_charge_taxes_on_shipping: bool,
+):
     """Return item tax.
 
     For some countries you need to set tax info
     Read more:
     https://support.google.com/merchants/answer/6324454
     """
-    # FIXME https://github.com/mirumee/saleor/issues/4311
-    return "US::%s:y" % zero_money()
+    country = Country(settings.DEFAULT_COUNTRY)
+    tax_rate = get_plugins_manager().get_tax_rate_percentage_value(
+        item.product.product_type, country
+    )
+    if tax_rate:
+        tax_ship = "yes" if is_charge_taxes_on_shipping else "no"
+        return "%s::%s:%s" % (country.code, tax_rate, tax_ship)
+    return None
 
 
 def item_group_id(item: ProductVariant):
@@ -187,6 +194,7 @@ def item_attributes(
     discounts: Iterable[DiscountInfo],
     attributes_dict,
     attribute_values_dict,
+    is_charge_taxes_on_shipping: bool,
 ):
     product_data = {
         "id": item_id(item),
@@ -197,7 +205,6 @@ def item_attributes(
         "item_group_id": item_group_id(item),
         "availability": item_availability(item),
         "google_product_category": item_google_product_category(item, category_paths),
-        "link": item_link(item, current_site),
     }
 
     image_link = item_image_link(item, current_site)
@@ -210,7 +217,7 @@ def item_attributes(
     if sale_price != price:
         product_data["sale_price"] = sale_price
 
-    tax = item_tax(item, discounts)
+    tax = item_tax(item, discounts, is_charge_taxes_on_shipping)
     if tax:
         product_data["tax"] = tax
 
@@ -223,6 +230,7 @@ def item_attributes(
 
 def write_feed(file_obj):
     """Write feed contents info provided file object."""
+    is_charge_taxes_on_shipping = charge_taxes_on_shipping()
     writer = csv.DictWriter(file_obj, ATTRIBUTES, dialect=csv.excel_tab)
     writer.writeheader()
     categories = Category.objects.all()
@@ -242,6 +250,7 @@ def write_feed(file_obj):
             discounts,
             attributes_dict,
             attribute_values_dict,
+            is_charge_taxes_on_shipping,
         )
         writer.writerow(item_data)
 

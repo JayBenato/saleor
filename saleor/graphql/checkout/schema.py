@@ -2,6 +2,7 @@ import graphene
 
 from ...core.permissions import CheckoutPermissions
 from ..core.fields import BaseDjangoConnectionField, PrefetchingConnectionField
+from ..core.scalars import UUID
 from ..decorators import permission_required
 from ..payment.mutations import CheckoutPaymentCreate
 from .mutations import (
@@ -31,7 +32,7 @@ class CheckoutQueries(graphene.ObjectType):
     checkout = graphene.Field(
         Checkout,
         description="Look up a checkout by token.",
-        token=graphene.Argument(graphene.UUID, description="The checkout's token."),
+        token=graphene.Argument(UUID, description="The checkout's token."),
     )
     # FIXME we could optimize the below field
     checkouts = BaseDjangoConnectionField(Checkout, description="List of checkouts.")
@@ -44,8 +45,8 @@ class CheckoutQueries(graphene.ObjectType):
         CheckoutLine, description="List of checkout lines."
     )
 
-    def resolve_checkout(self, *_args, token):
-        return resolve_checkout(token)
+    def resolve_checkout(self, info, token):
+        return resolve_checkout(info, token)
 
     @permission_required(CheckoutPermissions.MANAGE_CHECKOUTS)
     def resolve_checkouts(self, *_args, **_kwargs):
@@ -74,7 +75,27 @@ class CheckoutMutations(graphene.ObjectType):
     checkout_payment_create = CheckoutPaymentCreate.Field()
     checkout_shipping_address_update = CheckoutShippingAddressUpdate.Field()
     checkout_shipping_method_update = CheckoutShippingMethodUpdate.Field()
-    checkout_update_metadata = CheckoutUpdateMeta.Field()
-    checkout_clear_metadata = CheckoutClearMeta.Field()
-    checkout_update_private_metadata = CheckoutUpdatePrivateMeta.Field()
-    checkout_clear_private_metadata = CheckoutClearPrivateMeta.Field()
+    checkout_update_metadata = CheckoutUpdateMeta.Field(
+        deprecation_reason=(
+            "Use the `updateMetadata` mutation. This field will be removed after "
+            "2020-07-31."
+        )
+    )
+    checkout_clear_metadata = CheckoutClearMeta.Field(
+        deprecation_reason=(
+            "Use the `deleteMetadata` mutation. This field will be removed after "
+            "2020-07-31."
+        )
+    )
+    checkout_update_private_metadata = CheckoutUpdatePrivateMeta.Field(
+        deprecation_reason=(
+            "Use the `updatePrivateMetadata` mutation. This field will be removed "
+            "after 2020-07-31."
+        )
+    )
+    checkout_clear_private_metadata = CheckoutClearPrivateMeta.Field(
+        deprecation_reason=(
+            "Use the `deletePrivateMetadata` mutation. This field will be removed "
+            "after 2020-07-31."
+        )
+    )

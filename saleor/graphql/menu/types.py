@@ -1,25 +1,22 @@
 import graphene
-import graphene_django_optimizer as gql_optimizer
-from django.db.models import Prefetch
 from graphene import relay
 
 from ...menu import models
 from ..core.connection import CountableDjangoObjectType
+from ..page.dataloaders import PageByIdLoader
+from ..product.dataloaders import CategoryByIdLoader, CollectionByIdLoader
 from ..translations.fields import TranslationField
 from ..translations.types import MenuItemTranslation
-
-
-def prefetch_menus(info, *_args, **_kwargs):
-    qs = models.MenuItem.objects.filter(level=0)
-    return Prefetch(
-        "items", queryset=gql_optimizer.query(qs, info), to_attr="prefetched_items"
-    )
+from .dataloaders import (
+    MenuByIdLoader,
+    MenuItemByIdLoader,
+    MenuItemChildrenLoader,
+    MenuItemsByParentMenuLoader,
+)
 
 
 class Menu(CountableDjangoObjectType):
-    items = gql_optimizer.field(
-        graphene.List(lambda: MenuItem), prefetch_related=prefetch_menus
-    )
+    items = graphene.List(lambda: MenuItem)
 
     class Meta:
         description = (
@@ -27,20 +24,16 @@ class Menu(CountableDjangoObjectType):
             "through the store."
         )
         interfaces = [relay.Node]
-        only_fields = ["id", "name"]
+        only_fields = ["id", "name", "slug"]
         model = models.Menu
 
     @staticmethod
-    def resolve_items(root: models.Menu, _info, **_kwargs):
-        if hasattr(root, "prefetched_items"):
-            return root.prefetched_items  # type: ignore
-        return root.items.filter(level=0)
+    def resolve_items(root: models.Menu, info, **_kwargs):
+        return MenuItemsByParentMenuLoader(info.context).load(root.id)
 
 
 class MenuItem(CountableDjangoObjectType):
-    children = gql_optimizer.field(
-        graphene.List(lambda: MenuItem), model_field="children"
-    )
+    children = graphene.List(lambda: MenuItem)
     url = graphene.String(description="URL to the menu item.")
     translation = TranslationField(MenuItemTranslation, type_name="menu item")
 
@@ -63,8 +56,38 @@ class MenuItem(CountableDjangoObjectType):
         model = models.MenuItem
 
     @staticmethod
-    def resolve_children(root: models.MenuItem, _info, **_kwargs):
-        return root.children.all()
+    def resolve_category(root: models.MenuItem, info, **_kwargs):
+        if root.category_id:
+            return CategoryByIdLoader(info.context).load(root.category_id)
+        return None
+
+    @staticmethod
+    def resolve_children(root: models.MenuItem, info, **_kwargs):
+        return MenuItemChildrenLoader(info.context).load(root.id)
+
+    @staticmethod
+    def resolve_collection(root: models.MenuItem, info, **_kwargs):
+        if root.collection_id:
+            return CollectionByIdLoader(info.context).load(root.collection_id)
+        return None
+
+    @staticmethod
+    def resolve_menu(root: models.MenuItem, info, **_kwargs):
+        if root.menu_id:
+            return MenuByIdLoader(info.context).load(root.menu_id)
+        return None
+
+    @staticmethod
+    def resolve_parent(root: models.MenuItem, info, **_kwargs):
+        if root.parent_id:
+            return MenuItemByIdLoader(info.context).load(root.parent_id)
+        return None
+
+    @staticmethod
+    def resolve_page(root: models.MenuItem, info, **kwargs):
+        if root.page_id:
+            return PageByIdLoader(info.context).load(root.page_id)
+        return None
 
 
 class MenuItemMoveInput(graphene.InputObjectType):
@@ -73,5 +96,9 @@ class MenuItemMoveInput(graphene.InputObjectType):
         description="ID of the parent menu. If empty, menu will be top level menu."
     )
     sort_order = graphene.Int(
-        description="Sorting position of the menu item (from 0 to x)."
+        description=(
+            "The new relative sorting position of the item (from -inf to +inf). "
+            "1 moves the item one position forward, -1 moves the item one position "
+            "backward, 0 leaves the item unchanged."
+        )
     )

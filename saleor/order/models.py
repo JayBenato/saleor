@@ -1,12 +1,13 @@
 from decimal import Decimal
 from operator import attrgetter
+from re import match
 from typing import Optional
 from uuid import uuid4
 
 from django.conf import settings
-from django.contrib.postgres.fields import JSONField
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import JSONField  # type: ignore
 from django.db.models import F, Max, Sum
 from django.utils.timezone import now
 from django_measurement.models import MeasurementField
@@ -28,6 +29,10 @@ from . import FulfillmentStatus, OrderEvents, OrderStatus
 
 
 class OrderQueryset(models.QuerySet):
+    def get_by_checkout_token(self, token):
+        """Return non-draft order with matched checkout token."""
+        return self.confirmed().filter(checkout_token=token).first()
+
     def confirmed(self):
         """Return non-draft orders."""
         return self.exclude(status=OrderStatus.DRAFT)
@@ -161,8 +166,8 @@ class Order(ModelWithMetadata):
         default=0,
     )
     discount = MoneyField(amount_field="discount_amount", currency_field="currency")
-    discount_name = models.CharField(max_length=255, default="", blank=True)
-    translated_discount_name = models.CharField(max_length=255, default="", blank=True)
+    discount_name = models.CharField(max_length=255, blank=True, null=True)
+    translated_discount_name = models.CharField(max_length=255, blank=True, null=True)
     display_gross_prices = models.BooleanField(default=True)
     customer_note = models.TextField(blank=True, default="")
     weight = MeasurementField(
@@ -219,11 +224,6 @@ class Order(ModelWithMetadata):
     def __str__(self):
         return "#%d" % (self.id,)
 
-    # Deprecated. To remove in #5022
-    @staticmethod
-    def get_absolute_url():
-        return ""
-
     def get_last_payment(self):
         return max(self.payments.all(), default=None, key=attrgetter("pk"))
 
@@ -242,7 +242,20 @@ class Order(ModelWithMetadata):
     def is_pre_authorized(self):
         return (
             self.payments.filter(
-                is_active=True, transactions__kind=TransactionKind.AUTH
+                is_active=True,
+                transactions__kind=TransactionKind.AUTH,
+                transactions__action_required=False,
+            )
+            .filter(transactions__is_success=True)
+            .exists()
+        )
+
+    def is_captured(self):
+        return (
+            self.payments.filter(
+                is_active=True,
+                transactions__kind=TransactionKind.CAPTURE,
+                transactions__action_required=False,
             )
             .filter(transactions__is_success=True)
             .exists()
@@ -270,7 +283,9 @@ class Order(ModelWithMetadata):
         return self.status in statuses
 
     def can_cancel(self):
-        return self.status not in {OrderStatus.CANCELED, OrderStatus.DRAFT}
+        return (
+            not self.fulfillments.exclude(status=FulfillmentStatus.CANCELED).exists()
+        ) and self.status not in {OrderStatus.CANCELED, OrderStatus.DRAFT}
 
     def can_capture(self, payment=None):
         if not payment:
@@ -433,6 +448,9 @@ class Fulfillment(ModelWithMetadata):
     tracking_number = models.CharField(max_length=255, default="", blank=True)
     created = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ("pk",)
+
     def __str__(self):
         return f"Fulfillment #{self.composed_id}"
 
@@ -458,6 +476,10 @@ class Fulfillment(ModelWithMetadata):
     def get_total_quantity(self):
         return sum([line.quantity for line in self])
 
+    @property
+    def is_tracking_number_url(self):
+        return bool(match(r"^[-\w]+://", self.tracking_number))
+
 
 class FulfillmentLine(models.Model):
     order_line = models.ForeignKey(
@@ -467,6 +489,13 @@ class FulfillmentLine(models.Model):
         Fulfillment, related_name="lines", on_delete=models.CASCADE
     )
     quantity = models.PositiveIntegerField()
+    stock = models.ForeignKey(
+        "warehouse.Stock",
+        related_name="fulfillment_lines",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
 
 
 class OrderEvent(models.Model):

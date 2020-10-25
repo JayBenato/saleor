@@ -1,18 +1,18 @@
 import graphene
+from django.core.exceptions import ValidationError
 
 from ...core.permissions import DiscountPermissions
-from ...core.utils.promo_code import (
-    PromoCodeAlreadyExists,
-    generate_promo_code,
-    is_available_promo_code,
-)
+from ...core.utils.promo_code import generate_promo_code, is_available_promo_code
 from ...discount import models
+from ...discount.error_codes import DiscountErrorCode
 from ...product.tasks import (
     update_products_minimal_variant_prices_of_catalogues_task,
     update_products_minimal_variant_prices_of_discount_task,
 )
 from ..core.mutations import BaseMutation, ModelDeleteMutation, ModelMutation
-from ..core.scalars import Decimal
+from ..core.scalars import PositiveDecimal
+from ..core.types.common import DiscountError
+from ..core.validators import validate_price_precision
 from ..product.types import Category, Collection, Product
 from .enums import DiscountValueTypeEnum, VoucherTypeEnum
 from .types import Sale, Voucher
@@ -86,7 +86,7 @@ class VoucherInput(graphene.InputObjectType):
         description=("Voucher type: PRODUCT, CATEGORY SHIPPING or ENTIRE_ORDER.")
     )
     name = graphene.String(description="Voucher name.")
-    code = graphene.String(decription="Code to use the voucher.")
+    code = graphene.String(description="Code to use the voucher.")
     start_date = graphene.types.datetime.DateTime(
         description="Start date of the voucher in ISO 8601 format."
     )
@@ -96,7 +96,7 @@ class VoucherInput(graphene.InputObjectType):
     discount_value_type = DiscountValueTypeEnum(
         description="Choices: fixed or percentage."
     )
-    discount_value = Decimal(description="Value of the voucher.")
+    discount_value = PositiveDecimal(description="Value of the voucher.")
     products = graphene.List(
         graphene.ID, description="Products discounted by the voucher.", name="products"
     )
@@ -110,7 +110,7 @@ class VoucherInput(graphene.InputObjectType):
         description="Categories discounted by the voucher.",
         name="categories",
     )
-    min_amount_spent = Decimal(
+    min_amount_spent = PositiveDecimal(
         description="Min purchase amount required to apply the voucher."
     )
     min_checkout_items_quantity = graphene.Int(
@@ -141,6 +141,8 @@ class VoucherCreate(ModelMutation):
         description = "Creates a new voucher."
         model = models.Voucher
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
     @classmethod
     def clean_input(cls, info, instance, data):
@@ -148,11 +150,23 @@ class VoucherCreate(ModelMutation):
         if code == "":
             data["code"] = generate_promo_code()
         elif not is_available_promo_code(code):
-            raise PromoCodeAlreadyExists()
+            raise ValidationError(
+                {
+                    "code": ValidationError(
+                        "Promo code already exists.",
+                        code=DiscountErrorCode.ALREADY_EXISTS,
+                    )
+                }
+            )
         cleaned_input = super().clean_input(info, instance, data)
 
         min_spent_amount = cleaned_input.pop("min_amount_spent", None)
         if min_spent_amount is not None:
+            try:
+                validate_price_precision(min_spent_amount, instance.currency)
+            except ValidationError as error:
+                error.code = DiscountErrorCode.INVALID.value
+                raise ValidationError({"min_spent_amount": error})
             cleaned_input["min_spent_amount"] = min_spent_amount
         return cleaned_input
 
@@ -168,6 +182,8 @@ class VoucherUpdate(VoucherCreate):
         description = "Updates a voucher."
         model = models.Voucher
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
 
 class VoucherDelete(ModelDeleteMutation):
@@ -178,6 +194,8 @@ class VoucherDelete(ModelDeleteMutation):
         description = "Deletes a voucher."
         model = models.Voucher
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
 
 class VoucherBaseCatalogueMutation(BaseDiscountCatalogueMutation):
@@ -200,6 +218,8 @@ class VoucherAddCatalogues(VoucherBaseCatalogueMutation):
     class Meta:
         description = "Adds products, categories, collections to a voucher."
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
     @classmethod
     def perform_mutation(cls, _root, info, **data):
@@ -214,6 +234,8 @@ class VoucherRemoveCatalogues(VoucherBaseCatalogueMutation):
     class Meta:
         description = "Removes products, categories, collections from a voucher."
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
     @classmethod
     def perform_mutation(cls, _root, info, **data):
@@ -227,7 +249,7 @@ class VoucherRemoveCatalogues(VoucherBaseCatalogueMutation):
 class SaleInput(graphene.InputObjectType):
     name = graphene.String(description="Voucher name.")
     type = DiscountValueTypeEnum(description="Fixed or percentage.")
-    value = Decimal(description="Value of the voucher.")
+    value = PositiveDecimal(description="Value of the voucher.")
     products = graphene.List(
         graphene.ID, description="Products related to the discount.", name="products"
     )
@@ -268,6 +290,8 @@ class SaleCreate(SaleUpdateMinimalVariantPriceMixin, ModelMutation):
         description = "Creates a new sale."
         model = models.Sale
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
 
 class SaleUpdate(SaleUpdateMinimalVariantPriceMixin, ModelMutation):
@@ -281,6 +305,8 @@ class SaleUpdate(SaleUpdateMinimalVariantPriceMixin, ModelMutation):
         description = "Updates a sale."
         model = models.Sale
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
 
 class SaleDelete(SaleUpdateMinimalVariantPriceMixin, ModelDeleteMutation):
@@ -291,6 +317,8 @@ class SaleDelete(SaleUpdateMinimalVariantPriceMixin, ModelDeleteMutation):
         description = "Deletes a sale."
         model = models.Sale
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
 
 class SaleBaseCatalogueMutation(BaseDiscountCatalogueMutation):
@@ -313,6 +341,8 @@ class SaleAddCatalogues(SaleBaseCatalogueMutation):
     class Meta:
         description = "Adds products, categories, collections to a voucher."
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
     @classmethod
     def perform_mutation(cls, _root, info, **data):
@@ -327,6 +357,8 @@ class SaleRemoveCatalogues(SaleBaseCatalogueMutation):
     class Meta:
         description = "Removes products, categories, collections from a sale."
         permissions = (DiscountPermissions.MANAGE_DISCOUNTS,)
+        error_type_class = DiscountError
+        error_type_field = "discount_errors"
 
     @classmethod
     def perform_mutation(cls, _root, info, **data):

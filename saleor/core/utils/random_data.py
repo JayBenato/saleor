@@ -12,7 +12,8 @@ from django.conf import settings
 from django.contrib.auth.models import Group, Permission
 from django.contrib.sites.models import Site
 from django.core.files import File
-from django.db.models import Q
+from django.db.models import F, Q
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from faker import Factory
@@ -28,20 +29,21 @@ from ...core.permissions import (
     CheckoutPermissions,
     GiftcardPermissions,
     OrderPermissions,
+    get_permissions,
 )
+from ...core.utils import build_absolute_uri
 from ...core.weight import zero_weight
 from ...discount import DiscountValueType, VoucherType
 from ...discount.models import Sale, Voucher
 from ...discount.utils import fetch_discounts
-from ...extensions.manager import get_extensions_manager
 from ...giftcard.models import GiftCard
 from ...menu.models import Menu
-from ...menu.utils import update_menu
 from ...order.models import Fulfillment, Order, OrderLine
 from ...order.utils import update_order_status
 from ...page.models import Page
 from ...payment import gateway
 from ...payment.utils import create_payment
+from ...plugins.manager import get_plugins_manager
 from ...product.models import (
     AssignedProductAttribute,
     AssignedVariantAttribute,
@@ -123,6 +125,12 @@ IMAGES_MAPPING = {
     116: ["saleordemoproduct_cl_bogo02_1.png"],
     117: ["saleordemoproduct_cl_bogo03_1.png"],
     118: ["saleordemoproduct_cl_bogo04_1.png", "saleordemoproduct_cl_bogo04_2.png"],
+    119: ["saleor-digital-03_1.png"],
+    120: ["saleor-digital-03_2.png"],
+    121: ["saleor-digital-03_3.png"],
+    122: ["saleor-digital-03_4.png"],
+    123: ["saleor-digital-03_5.png"],
+    124: ["saleor-digital-03_6.png"],
 }
 
 
@@ -134,7 +142,7 @@ COLLECTION_IMAGES = {1: "summer.jpg", 2: "clothing.jpg"}
 def get_weight(weight):
     if not weight:
         return zero_weight()
-    value, unit = weight.split()
+    value, unit = weight.split(":")
     return Weight(**{unit: value})
 
 
@@ -207,10 +215,10 @@ def create_products(products_data, placeholder_dir, create_images):
             continue
 
         defaults = product["fields"]
-        set_field_as_money(defaults, "price")
         defaults["weight"] = get_weight(defaults["weight"])
         defaults["category_id"] = defaults.pop("category")
         defaults["product_type_id"] = defaults.pop("product_type")
+
         product, _ = Product.objects.update_or_create(pk=pk, defaults=defaults)
 
         if create_images:
@@ -241,10 +249,9 @@ def create_product_variants(variants_data):
         defaults["product_id"] = product_id
         set_field_as_money(defaults, "price_override")
         set_field_as_money(defaults, "cost_price")
-        quantity = defaults.pop("quantity")
-        quantity_allocated = defaults.pop("quantity_allocated")
         variant, _ = ProductVariant.objects.update_or_create(pk=pk, defaults=defaults)
-        create_stocks(variant, quantity=quantity, quantity_allocated=quantity_allocated)
+        quantity = random.randint(100, 500)
+        create_stocks(variant, quantity=quantity)
 
 
 def assign_attributes_to_product_types(
@@ -420,7 +427,7 @@ def create_fake_user(save=True):
 @patch("saleor.order.emails.send_payment_confirmation.delay")
 def create_fake_payment(mock_email_confirmation, order):
     payment = create_payment(
-        gateway="Dummy",
+        gateway="mirumee.payments.dummy",
         customer_ip_address=fake.ipv4(),
         email=order.user_email,
         order=order,
@@ -454,15 +461,10 @@ def create_order_lines(order, discounts, how_many=10):
     )
     variants_iter = itertools.cycle(variants)
     lines = []
-    stocks = []
-    country = order.shipping_address.country
     for dummy in range(how_many):
         variant = next(variants_iter)
         product = variant.product
         quantity = random.randrange(1, 5)
-        stocks.append(
-            increase_stock(variant, country, quantity, allocate=True, commit=False)
-        )
         unit_price = variant.get_price(discounts)
         unit_price = TaxedMoney(net=unit_price, gross=unit_price)
         lines.append(
@@ -478,13 +480,19 @@ def create_order_lines(order, discounts, how_many=10):
                 tax_rate=0,
             )
         )
-    Stock.objects.bulk_update(stocks, ["quantity", "quantity_allocated"])
     lines = OrderLine.objects.bulk_create(lines)
-    manager = get_extensions_manager()
+    manager = get_plugins_manager()
+    country = order.shipping_method.shipping_zone.countries[0]
+    warehouses = Warehouse.objects.filter(
+        shipping_zones__countries__contains=country
+    ).order_by("?")
+    warehouse_iter = itertools.cycle(warehouses)
     for line in lines:
         unit_price = manager.calculate_order_line_unit(line)
         line.unit_price = unit_price
         line.tax_rate = unit_price.tax / unit_price.net
+        warehouse = next(warehouse_iter)
+        increase_stock(line, warehouse, line.quantity, allocate=True)
     OrderLine.objects.bulk_update(
         lines,
         ["unit_price_net_amount", "unit_price_gross_amount", "currency", "tax_rate"],
@@ -497,22 +505,32 @@ def create_fulfillments(order):
         if random.choice([False, True]):
             fulfillment, _ = Fulfillment.objects.get_or_create(order=order)
             quantity = random.randrange(0, line.quantity) + 1
-            fulfillment.lines.create(order_line=line, quantity=quantity)
+            allocation = line.allocations.get()
+            fulfillment.lines.create(
+                order_line=line, quantity=quantity, stock=allocation.stock
+            )
             line.quantity_fulfilled = quantity
             line.save(update_fields=["quantity_fulfilled"])
+
+            allocation.quantity_allocated = F("quantity_allocated") - quantity
+            allocation.save(update_fields=["quantity_allocated"])
 
     update_order_status(order)
 
 
 def create_fake_order(discounts, max_order_lines=5):
-    user = random.choice(
-        [None, User.objects.filter(is_superuser=False).order_by("?").first()]
+    customers = (
+        User.objects.filter(is_superuser=False)
+        .exclude(default_billing_address=None)
+        .order_by("?")
     )
-    if user:
-        address = user.default_shipping_address
+    customer = random.choice([None, customers.first()])
+
+    if customer:
+        address = customer.default_shipping_address
         order_data = {
-            "user": user,
-            "billing_address": user.default_billing_address,
+            "user": customer,
+            "billing_address": customer.default_billing_address,
             "shipping_address": address,
         }
     else:
@@ -523,12 +541,16 @@ def create_fake_order(discounts, max_order_lines=5):
             "user_email": get_email(address.first_name, address.last_name),
         }
 
-    manager = get_extensions_manager()
+    manager = get_plugins_manager()
     shipping_method = ShippingMethod.objects.order_by("?").first()
     shipping_price = shipping_method.price
     shipping_price = manager.apply_taxes_to_shipping(shipping_price, address)
     order_data.update(
-        {"shipping_method_name": shipping_method.name, "shipping_price": shipping_price}
+        {
+            "shipping_method": shipping_method,
+            "shipping_method_name": shipping_method.name,
+            "shipping_price": shipping_price,
+        }
     )
 
     order = Order.objects.create(**order_data)
@@ -567,7 +589,7 @@ def create_permission_groups():
     super_users = User.objects.filter(is_superuser=True)
     if not super_users:
         super_users = create_staff_users(1, True)
-    group = create_group("Full Access", Permission.objects.all(), super_users)
+    group = create_group("Full Access", get_permissions(), super_users)
     yield f"Group: {group}"
 
     staff_users = create_staff_users()
@@ -585,7 +607,7 @@ def create_permission_groups():
 
 
 def create_group(name, permissions, users):
-    group = Group.objects.create(name=name)
+    group, _ = Group.objects.get_or_create(name=name)
     group.permissions.add(*permissions)
     group.user_set.add(*users)
     return group
@@ -594,14 +616,18 @@ def create_group(name, permissions, users):
 def create_staff_users(how_many=2, superuser=False):
     users = []
     for _ in range(how_many):
-        first_name = fake.first_name()
-        last_name = fake.last_name()
+        address = create_address()
+        first_name = address.first_name
+        last_name = address.last_name
         email = get_email(first_name, last_name)
+
         staff_user = User.objects.create_user(
             first_name=first_name,
             last_name=last_name,
             email=email,
             password="password",
+            default_billing_address=address,
+            default_shipping_address=address,
             is_staff=True,
             is_active=True,
             is_superuser=superuser,
@@ -982,6 +1008,19 @@ def create_vouchers():
     else:
         yield "Value voucher already exists"
 
+    voucher, created = Voucher.objects.get_or_create(
+        code="VCO9KV98LC",
+        defaults={
+            "type": VoucherType.ENTIRE_ORDER,
+            "discount_value_type": DiscountValueType.PERCENTAGE,
+            "discount_value": 5,
+        },
+    )
+    if created:
+        yield "Voucher #%d" % voucher.id
+    else:
+        yield "Value voucher already exists"
+
 
 def create_gift_card():
     user = random.choice(
@@ -1164,11 +1203,17 @@ def create_menus():
             name=collection.name, collection=collection, parent=item
         )
 
+    item_saleor = bottom_menu.items.get_or_create(name="Saleor", url="/")[0]
+
     page = Page.objects.order_by("?")[0]
-    bottom_menu.items.get_or_create(name=page.title, page=page)
+    item_saleor.children.get_or_create(name=page.title, page=page, menu=bottom_menu)
+
+    api_url = build_absolute_uri(reverse("api"))
+    item_saleor.children.get_or_create(
+        name="GraphQL API", url=api_url, menu=bottom_menu
+    )
+
     yield "Created footer menu"
-    update_menu(top_menu)
-    update_menu(bottom_menu)
     site = Site.objects.get_current()
     site_settings = site.settings
     site_settings.top_menu = top_menu

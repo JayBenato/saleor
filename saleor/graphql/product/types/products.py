@@ -2,13 +2,13 @@ from dataclasses import asdict
 from typing import List, Union
 
 import graphene
-import graphene_django_optimizer as gql_optimizer
-from django.db.models import Prefetch
+from django.conf import settings
 from graphene import relay
 from graphene_federation import key
 from graphql.error import GraphQLError
 
-from ....core.permissions import ProductPermissions
+from ....core.permissions import OrderPermissions, ProductPermissions
+from ....core.weight import convert_weight_to_default_weight_unit
 from ....product import models
 from ....product.templatetags.product_images import (
     get_product_image_thumbnail,
@@ -20,28 +20,20 @@ from ....product.utils.availability import (
     get_variant_availability,
 )
 from ....product.utils.costs import get_margin_for_variant, get_product_costs_data
-from ....warehouse import models as stock_models
 from ....warehouse.availability import (
     get_available_quantity,
-    get_available_quantity_for_customer,
     get_quantity_allocated,
     is_product_in_stock,
-    is_variant_in_stock,
 )
+from ...account.enums import CountryCodeEnum
 from ...core.connection import CountableDjangoObjectType
 from ...core.enums import ReportingPeriod, TaxRateType
 from ...core.fields import FilterInputConnectionField, PrefetchingConnectionField
-from ...core.resolvers import resolve_meta, resolve_private_meta
-from ...core.types import (
-    Image,
-    MetadataObjectType,
-    Money,
-    MoneyRange,
-    TaxedMoney,
-    TaxedMoneyRange,
-    TaxType,
-)
-from ...decorators import permission_required
+from ...core.types import Image, Money, MoneyRange, TaxedMoney, TaxedMoneyRange, TaxType
+from ...decorators import one_of_permissions_required, permission_required
+from ...discount.dataloaders import DiscountsByDateTimeLoader
+from ...meta.deprecated.resolvers import resolve_meta, resolve_private_meta
+from ...meta.types import ObjectWithMetadata
 from ...translations.fields import TranslationField
 from ...translations.types import (
     CategoryTranslation,
@@ -49,39 +41,31 @@ from ...translations.types import (
     ProductTranslation,
     ProductVariantTranslation,
 )
-from ...utils import get_database_id, reporting_period_to_date
+from ...utils import get_database_id, get_user_or_app_from_context
+from ...utils.filters import reporting_period_to_date
+from ...warehouse.dataloaders import (
+    AvailableQuantityByProductVariantIdAndCountryCodeLoader,
+)
 from ...warehouse.types import Stock
-from ..filters import AttributeFilterInput
+from ..dataloaders import (
+    CategoryByIdLoader,
+    CollectionsByProductIdLoader,
+    ImagesByProductIdLoader,
+    ImagesByProductVariantIdLoader,
+    ProductAttributesByProductTypeIdLoader,
+    ProductByIdLoader,
+    ProductTypeByIdLoader,
+    ProductVariantByIdLoader,
+    ProductVariantsByProductIdLoader,
+    SelectedAttributesByProductIdLoader,
+    SelectedAttributesByProductVariantIdLoader,
+    VariantAttributesByProductTypeIdLoader,
+)
+from ..filters import AttributeFilterInput, ProductFilterInput
 from ..resolvers import resolve_attributes
+from ..sorters import ProductOrder
 from .attributes import Attribute, SelectedAttribute
 from .digital_contents import DigitalContent
-
-
-def prefetch_products(info, *_args, **_kwargs):
-    """Prefetch products visible to the current user.
-
-    Can be used with models that have the `products` relationship. The queryset
-    of products being prefetched is filtered based on permissions of the
-    requesting user, to restrict access to unpublished products from non-staff
-    users.
-    """
-    user = info.context.user
-    qs = models.Product.objects.visible_to_user(user)
-    return Prefetch(
-        "products",
-        queryset=gql_optimizer.query(qs, info),
-        to_attr="prefetched_products",
-    )
-
-
-def prefetch_products_collection_sorted(info, *_args, **_kwargs):
-    user = info.context.user
-    qs = models.Product.objects.collection_sorted(user)
-    return Prefetch(
-        "products",
-        queryset=gql_optimizer.query(qs, info),
-        to_attr="prefetched_products",
-    )
 
 
 def resolve_attribute_list(
@@ -194,33 +178,38 @@ class ProductPricingInfo(BasePricingInfo):
 
 
 @key(fields="id")
-class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
+class ProductVariant(CountableDjangoObjectType):
     quantity = graphene.Int(
         required=True,
-        description="Quantity of a product in the store's possession, "
-        "including the allocated stock that is waiting for shipment.",
-        deprecation_reason="This field will be removed in Saleor 2.11. "
-        "Use the stock field instead.",
+        description="Quantity of a product available for sale.",
+        deprecation_reason=(
+            "Use the stock field instead. This field will be removed after 2020-07-31."
+        ),
     )
     quantity_allocated = graphene.Int(
         required=False,
-        description="Quantity allocated for orders",
-        deprecation_reason="This field will be removed in Saleor 2.11. "
-        "Use the stock field instead.",
+        description="Quantity allocated for orders.",
+        deprecation_reason=(
+            "Use the stock field instead. This field will be removed after 2020-07-31."
+        ),
     )
     stock_quantity = graphene.Int(
         required=True,
         description="Quantity of a product available for sale.",
-        deprecation_reason="This field will be removed in Saleor 2.11. "
-        "Use the stock field instead.",
-    )
-    price_override = graphene.Field(
-        Money,
-        description=(
-            "Override the base price of a product if necessary. A value of `null` "
-            "indicates that the default product price is used."
+        deprecation_reason=(
+            "Use the quantityAvailable field instead. "
+            "This field will be removed after 2020-07-31."
         ),
     )
+    price = graphene.Field(
+        Money,
+        description=(
+            "Base price of a product variant. "
+            "This field is restricted for admins. "
+            "Use the pricing field to get the public price for customers."
+        ),
+    )
+
     pricing = graphene.Field(
         VariantPricingInfo,
         description=(
@@ -230,16 +219,15 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
     )
     is_available = graphene.Boolean(
         description="Whether the variant is in stock and visible or not.",
-        deprecation_reason="This field will be removed in Saleor 2.11. "
-        "Use the stock field instead.",
+        deprecation_reason=(
+            "Use the stock field instead. This field will be removed after 2020-07-31."
+        ),
     )
 
-    attributes = gql_optimizer.field(
-        graphene.List(
-            graphene.NonNull(SelectedAttribute),
-            required=True,
-            description="List of attributes assigned to this variant.",
-        )
+    attributes = graphene.List(
+        graphene.NonNull(SelectedAttribute),
+        required=True,
+        description="List of attributes assigned to this variant.",
     )
     cost_price = graphene.Field(Money, description="Cost price of the variant.")
     margin = graphene.Int(description="Gross margin percentage value.")
@@ -253,28 +241,36 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
             "optimizations suitable for such calculations."
         ),
     )
-    images = gql_optimizer.field(
-        graphene.List(
-            lambda: ProductImage, description="List of images for the product variant."
-        ),
-        model_field="images",
+    images = graphene.List(
+        lambda: ProductImage, description="List of images for the product variant."
     )
     translation = TranslationField(
         ProductVariantTranslation, type_name="product variant"
     )
-    digital_content = gql_optimizer.field(
-        graphene.Field(
-            DigitalContent, description="Digital content for the product variant."
-        ),
-        model_field="digital_content",
+    digital_content = graphene.Field(
+        DigitalContent, description="Digital content for the product variant."
     )
-
-    stock = gql_optimizer.field(
-        graphene.Field(
-            graphene.List(Stock),
-            description="Stocks for the product variant.",
-            country=graphene.String(required=False),
-        )
+    stocks = graphene.Field(
+        graphene.List(Stock),
+        description="Stocks for the product variant.",
+        country_code=graphene.Argument(
+            CountryCodeEnum,
+            description="Two-letter ISO 3166-1 country code.",
+            required=False,
+        ),
+    )
+    quantity_available = graphene.Int(
+        required=True,
+        description="Quantity of a product available for sale in one checkout.",
+        country_code=graphene.Argument(
+            CountryCodeEnum,
+            description=(
+                "Two-letter ISO 3166-1 country code. When provided, the exact quantity "
+                "from a warehouse operating in shipping zones that contain this "
+                "country will be returned. Otherwise, it will return the maximum "
+                "quantity from all shipping zones."
+            ),
+        ),
     )
 
     class Meta:
@@ -282,18 +278,28 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
             "Represents a version of a product such as different size or color."
         )
         only_fields = ["id", "name", "product", "sku", "track_inventory", "weight"]
-        interfaces = [relay.Node]
+        interfaces = [relay.Node, ObjectWithMetadata]
         model = models.ProductVariant
 
     @staticmethod
-    def resolve_stock(root: models.ProductVariant, info, country=None):
-        if country is None:
-            return gql_optimizer.query(
-                root.stock.annotate_available_quantity().all(), info
-            )
-        return gql_optimizer.query(
-            root.stock.annotate_available_quantity().for_country(country).all(), info
-        )
+    @one_of_permissions_required(
+        [ProductPermissions.MANAGE_PRODUCTS, OrderPermissions.MANAGE_ORDERS]
+    )
+    def resolve_stocks(root: models.ProductVariant, info, country_code=None):
+        if not country_code:
+            return root.stocks.annotate_available_quantity()
+        return root.stocks.for_country(country_code).annotate_available_quantity()
+
+    @staticmethod
+    def resolve_quantity_available(
+        root: models.ProductVariant, info, country_code=None
+    ):
+        if not root.track_inventory:
+            return settings.MAX_CHECKOUT_LINE_QUANTITY
+
+        return AvailableQuantityByProductVariantIdAndCountryCodeLoader(
+            info.context
+        ).load((root.id, country_code))
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
@@ -302,21 +308,16 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
 
     @staticmethod
     def resolve_stock_quantity(root: models.ProductVariant, info):
-        country = info.context.country
-        try:
-            stock = stock_models.Stock.objects.get_variant_stock_for_country(
-                country, root
-            )
-        except stock_models.Stock.DoesNotExist:
-            return 0
-        return get_available_quantity_for_customer(stock)
+        if not root.track_inventory:
+            return settings.MAX_CHECKOUT_LINE_QUANTITY
+
+        return AvailableQuantityByProductVariantIdAndCountryCodeLoader(
+            info.context
+        ).load((root.id, info.context.country))
 
     @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related=["attributes__values", "attributes__assignment__attribute"]
-    )
     def resolve_attributes(root: models.ProductVariant, info):
-        return resolve_attribute_list(root, user=info.context.user)
+        return SelectedAttributesByProductVariantIdLoader(info.context).load(root.id)
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
@@ -329,33 +330,57 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
         return root.cost_price
 
     @staticmethod
+    @permission_required(ProductPermissions.MANAGE_PRODUCTS)
     def resolve_price(root: models.ProductVariant, *_args):
-        return root.base_price
+        return root.price
 
     @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related=("product",), only=["price_override_amount", "currency"]
-    )
     def resolve_pricing(root: models.ProductVariant, info):
         context = info.context
-        availability = get_variant_availability(
-            root,
-            context.discounts,
-            context.country,
-            context.currency,
-            extensions=context.extensions,
+        product = ProductByIdLoader(context).load(root.product_id)
+        collections = CollectionsByProductIdLoader(context).load(root.product_id)
+
+        def calculate_pricing_info(discounts):
+            def calculate_pricing_with_product(product):
+                def calculate_pricing_with_collections(collections):
+                    availability = get_variant_availability(
+                        variant=root,
+                        product=product,
+                        collections=collections,
+                        discounts=discounts,
+                        country=context.country,
+                        local_currency=context.currency,
+                        plugins=context.plugins,
+                    )
+                    return VariantPricingInfo(**asdict(availability))
+
+                return collections.then(calculate_pricing_with_collections)
+
+            return product.then(calculate_pricing_with_product)
+
+        return (
+            DiscountsByDateTimeLoader(context)
+            .load(info.context.request_time)
+            .then(calculate_pricing_info)
         )
-        return VariantPricingInfo(**asdict(availability))
+
+    @staticmethod
+    def resolve_product(root: models.ProductVariant, info):
+        return ProductByIdLoader(info.context).load(root.product_id)
 
     @staticmethod
     def resolve_is_available(root: models.ProductVariant, info):
-        country = info.context.country
-        return is_variant_in_stock(root, country)
+        if not root.track_inventory:
+            return True
 
-    @staticmethod
-    @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_price_override(root: models.ProductVariant, *_args):
-        return root.price_override
+        def is_variant_in_stock(available_quantity):
+            return available_quantity > 0
+
+        return (
+            AvailableQuantityByProductVariantIdAndCountryCodeLoader(info.context)
+            .load((root.id, info.context.country))
+            .then(is_variant_in_stock)
+        )
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
@@ -369,6 +394,7 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
         # `resolve_report_product_sales` resolver.
         return getattr(root, "quantity_ordered", None)
 
+    @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
     def resolve_quantity_allocated(root: models.ProductVariant, info):
         country = info.context.country
@@ -381,36 +407,42 @@ class ProductVariant(CountableDjangoObjectType, MetadataObjectType):
         return calculate_revenue_for_variant(root, start_date)
 
     @staticmethod
-    def resolve_images(root: models.ProductVariant, *_args):
-        return root.images.all()
+    def resolve_images(root: models.ProductVariant, info, *_args):
+        return ImagesByProductVariantIdLoader(info.context).load(root.id)
 
     @classmethod
-    def get_node(cls, info, id):
-        user = info.context.user
-        visible_products = models.Product.objects.visible_to_user(user).values_list(
-            "pk", flat=True
-        )
+    def get_node(cls, info, pk):
+        requestor = get_user_or_app_from_context(info.context)
+        visible_products = models.Product.objects.visible_to_user(
+            requestor
+        ).values_list("pk", flat=True)
         qs = cls._meta.model.objects.filter(product__id__in=visible_products)
-        return cls.maybe_optimize(info, qs, id)
+        return qs.filter(pk=pk).first()
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_private_meta(root, _info):
+    def resolve_private_meta(root: models.ProductVariant, _info):
         return resolve_private_meta(root, _info)
 
     @staticmethod
-    def resolve_meta(root, _info):
+    def resolve_meta(root: models.ProductVariant, _info):
         return resolve_meta(root, _info)
 
     @staticmethod
     def __resolve_reference(root, _info, **_kwargs):
         return graphene.Node.get_node_from_global_id(_info, root.id)
 
+    @staticmethod
+    def resolve_weight(root: models.ProductVariant, _info, **_kwargs):
+        return convert_weight_to_default_weight_unit(root.weight)
+
 
 @key(fields="id")
-class Product(CountableDjangoObjectType, MetadataObjectType):
+class Product(CountableDjangoObjectType):
     url = graphene.String(
-        description="The storefront URL for the product.", required=True
+        description="The storefront URL for the product.",
+        required=True,
+        deprecation_reason="This field will be removed after 2020-07-31.",
     )
     thumbnail = graphene.Field(
         Image,
@@ -427,7 +459,6 @@ class Product(CountableDjangoObjectType, MetadataObjectType):
     is_available = graphene.Boolean(
         description="Whether the product is in stock and visible or not."
     )
-    base_price = graphene.Field(Money, description="The product's default base price.")
     minimal_variant_price = graphene.Field(
         Money, description="The price of the cheapest variant (including discounts)."
     )
@@ -446,29 +477,26 @@ class Product(CountableDjangoObjectType, MetadataObjectType):
         id=graphene.Argument(graphene.ID, description="ID of a product image."),
         description="Get a single product image by ID.",
     )
-    variants = gql_optimizer.field(
-        graphene.List(ProductVariant, description="List of variants for the product."),
-        model_field="variants",
+    variants = graphene.List(
+        ProductVariant, description="List of variants for the product."
     )
-    images = gql_optimizer.field(
-        graphene.List(
-            lambda: ProductImage, description="List of images for the product."
-        ),
-        model_field="images",
+    images = graphene.List(
+        lambda: ProductImage, description="List of images for the product."
     )
-    collections = gql_optimizer.field(
-        graphene.List(
-            lambda: Collection, description="List of collections for the product."
-        ),
-        model_field="collections",
+    collections = graphene.List(
+        lambda: Collection, description="List of collections for the product."
     )
     translation = TranslationField(ProductTranslation, type_name="product")
+    is_available_for_purchase = graphene.Boolean(
+        description="Whether the product is available for purchase."
+    )
 
     class Meta:
         description = "Represents an individual item for sale in the storefront."
-        interfaces = [relay.Node]
+        interfaces = [relay.Node, ObjectWithMetadata]
         model = models.Product
         only_fields = [
+            "available_for_purchase",
             "category",
             "charge_taxes",
             "description",
@@ -483,81 +511,90 @@ class Product(CountableDjangoObjectType, MetadataObjectType):
             "seo_title",
             "updated_at",
             "weight",
+            "visible_in_listings",
+            "default_variant",
         ]
 
     @staticmethod
+    def resolve_default_variant(root: models.Product, info):
+        default_variant_id = root.default_variant_id
+        if default_variant_id is None:
+            return None
+
+        return ProductVariantByIdLoader(info.context).load(root.default_variant_id)
+
+    @staticmethod
+    def resolve_category(root: models.Product, info):
+        category_id = root.category_id
+        if category_id is None:
+            return None
+
+        return CategoryByIdLoader(info.context).load(category_id)
+
+    @staticmethod
     def resolve_tax_type(root: models.Product, info):
-        tax_data = info.context.extensions.get_tax_code_from_object_meta(root)
+        tax_data = info.context.plugins.get_tax_code_from_object_meta(root)
         return TaxType(tax_code=tax_data.code, description=tax_data.description)
 
     @staticmethod
-    @gql_optimizer.resolver_hints(prefetch_related="images")
     def resolve_thumbnail(root: models.Product, info, *, size=255):
-        image = root.get_first_image()
-        if image:
-            url = get_product_image_thumbnail(image, size, method="thumbnail")
-            alt = image.alt
-            return Image(alt=alt, url=info.context.build_absolute_uri(url))
-        return None
+        def return_first_thumbnail(images):
+            image = images[0] if images else None
+            if image:
+                url = get_product_image_thumbnail(image, size, method="thumbnail")
+                alt = image.alt
+                return Image(alt=alt, url=info.context.build_absolute_uri(url))
+            return None
+
+        return (
+            ImagesByProductIdLoader(info.context)
+            .load(root.id)
+            .then(return_first_thumbnail)
+        )
 
     @staticmethod
     def resolve_url(root: models.Product, *_args):
-        return root.get_absolute_url()
+        return ""
 
     @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related=("variants", "collections"),
-        only=["publication_date", "charge_taxes", "price_amount", "currency", "meta"],
-    )
     def resolve_pricing(root: models.Product, info):
         context = info.context
-        availability = get_product_availability(
-            root,
-            context.discounts,
-            context.country,
-            context.currency,
-            context.extensions,
+        variants = ProductVariantsByProductIdLoader(context).load(root.id)
+        collections = CollectionsByProductIdLoader(context).load(root.id)
+
+        def calculate_pricing_info(discounts):
+            def calculate_pricing_with_variants(variants):
+                def calculate_pricing_with_collections(collections):
+                    availability = get_product_availability(
+                        product=root,
+                        variants=variants,
+                        collections=collections,
+                        discounts=discounts,
+                        country=context.country,
+                        local_currency=context.currency,
+                        plugins=context.plugins,
+                    )
+                    return ProductPricingInfo(**asdict(availability))
+
+                return collections.then(calculate_pricing_with_collections)
+
+            return variants.then(calculate_pricing_with_variants)
+
+        return (
+            DiscountsByDateTimeLoader(context)
+            .load(info.context.request_time)
+            .then(calculate_pricing_info)
         )
-        return ProductPricingInfo(**asdict(availability))
 
     @staticmethod
-    @gql_optimizer.resolver_hints(prefetch_related=("variants"))
     def resolve_is_available(root: models.Product, info):
         country = info.context.country
         in_stock = is_product_in_stock(root, country)
         return root.is_visible and in_stock
 
     @staticmethod
-    @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_base_price(root: models.Product, _info):
-        return root.price
-
-    @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related=("variants", "collections"),
-        only=["publication_date", "charge_taxes", "price_amount", "currency", "meta"],
-    )
-    def resolve_price(root: models.Product, info):
-        price_range = root.get_price_range(info.context.discounts)
-        price = info.context.extensions.apply_taxes_to_product(
-            root, price_range.start, info.context.country
-        )
-        return price.net
-
-    @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related=[
-            Prefetch(
-                "product_type__attributeproduct",
-                queryset=models.AttributeProduct.objects.filter(
-                    attribute__visible_in_storefront=True
-                ).prefetch_related("productassignments__values", "attribute"),
-                to_attr="storefront_attributes",
-            )
-        ]
-    )
     def resolve_attributes(root: models.Product, info):
-        return resolve_attribute_list(root, user=info.context.user)
+        return SelectedAttributesByProductIdLoader(info.context).load(root.id)
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
@@ -580,13 +617,12 @@ class Product(CountableDjangoObjectType, MetadataObjectType):
             raise GraphQLError("Product image not found.")
 
     @staticmethod
-    @gql_optimizer.resolver_hints(model_field="images")
-    def resolve_images(root: models.Product, *_args, **_kwargs):
-        return root.images.all()
+    def resolve_images(root: models.Product, info, **_kwargs):
+        return ImagesByProductIdLoader(info.context).load(root.id)
 
     @staticmethod
-    def resolve_variants(root: models.Product, *_args, **_kwargs):
-        return root.variants.all()
+    def resolve_variants(root: models.Product, info, **_kwargs):
+        return ProductVariantsByProductIdLoader(info.context).load(root.id)
 
     @staticmethod
     def resolve_collections(root: models.Product, *_args):
@@ -595,31 +631,41 @@ class Product(CountableDjangoObjectType, MetadataObjectType):
     @classmethod
     def get_node(cls, info, pk):
         if info.context:
-            qs = cls._meta.model.objects.visible_to_user(info.context.user)
-            return cls.maybe_optimize(info, qs, pk)
+            requestor = get_user_or_app_from_context(info.context)
+            qs = cls._meta.model.objects.visible_to_user(requestor)
+            return qs.filter(pk=pk).first()
         return None
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_private_meta(root, _info):
+    def resolve_private_meta(root: models.Product, _info):
         return resolve_private_meta(root, _info)
 
     @staticmethod
-    def resolve_meta(root, _info):
+    def resolve_meta(root: models.Product, _info):
         return resolve_meta(root, _info)
 
     @staticmethod
     def __resolve_reference(root, _info, **_kwargs):
         return graphene.Node.get_node_from_global_id(_info, root.id)
 
+    @staticmethod
+    def resolve_weight(root: models.Product, _info, **_kwargs):
+        return convert_weight_to_default_weight_unit(root.weight)
+
+    @staticmethod
+    def resolve_is_available_for_purchase(root: models.Product, _info):
+        return root.is_available_for_purchase()
+
+    @staticmethod
+    def resolve_product_type(root: models.Product, info):
+        return ProductTypeByIdLoader(info.context).load(root.product_type_id)
+
 
 @key(fields="id")
-class ProductType(CountableDjangoObjectType, MetadataObjectType):
-    products = gql_optimizer.field(
-        PrefetchingConnectionField(
-            Product, description="List of products of this type."
-        ),
-        prefetch_related=prefetch_products,
+class ProductType(CountableDjangoObjectType):
+    products = PrefetchingConnectionField(
+        Product, description="List of products of this type."
     )
     tax_rate = TaxRateType(description="A type of tax rate.")
     tax_type = graphene.Field(
@@ -631,8 +677,8 @@ class ProductType(CountableDjangoObjectType, MetadataObjectType):
     product_attributes = graphene.List(
         Attribute, description="Product attributes of that product type."
     )
-    available_attributes = gql_optimizer.field(
-        FilterInputConnectionField(Attribute, filter=AttributeFilterInput())
+    available_attributes = FilterInputConnectionField(
+        Attribute, filter=AttributeFilterInput()
     )
 
     class Meta:
@@ -640,7 +686,7 @@ class ProductType(CountableDjangoObjectType, MetadataObjectType):
             "Represents a type of product. It defines what attributes are available to "
             "products of this type."
         )
-        interfaces = [relay.Node]
+        interfaces = [relay.Node, ObjectWithMetadata]
         model = models.ProductType
         only_fields = [
             "has_variants",
@@ -655,7 +701,7 @@ class ProductType(CountableDjangoObjectType, MetadataObjectType):
 
     @staticmethod
     def resolve_tax_type(root: models.ProductType, info):
-        tax_data = info.context.extensions.get_tax_code_from_object_meta(root)
+        tax_data = info.context.plugins.get_tax_code_from_object_meta(root)
         return TaxType(tax_code=tax_data.code, description=tax_data.description)
 
     @staticmethod
@@ -663,29 +709,19 @@ class ProductType(CountableDjangoObjectType, MetadataObjectType):
         # FIXME this resolver should be dropped after we drop tax_rate from API
         if not hasattr(root, "meta"):
             return None
-        tax = root.meta.get("taxes", {}).get("vatlayer", {})
-        return tax.get("code")
+        return root.get_value_from_metadata("vatlayer.code")
 
     @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related="product_attributes__attributeproduct"
-    )
-    def resolve_product_attributes(root: models.ProductType, *_args, **_kwargs):
-        return root.product_attributes.product_attributes_sorted().all()
+    def resolve_product_attributes(root: models.ProductType, info):
+        return ProductAttributesByProductTypeIdLoader(info.context).load(root.pk)
 
     @staticmethod
-    @gql_optimizer.resolver_hints(
-        prefetch_related="variant_attributes__attributevariant"
-    )
-    def resolve_variant_attributes(root: models.ProductType, *_args, **_kwargs):
-        return root.variant_attributes.variant_attributes_sorted().all()
+    def resolve_variant_attributes(root: models.ProductType, info):
+        return VariantAttributesByProductTypeIdLoader(info.context).load(root.pk)
 
     @staticmethod
     def resolve_products(root: models.ProductType, info, **_kwargs):
-        if hasattr(root, "prefetched_products"):
-            return root.prefetched_products  # type: ignore
-        qs = root.products.visible_to_user(info.context.user)
-        return gql_optimizer.query(qs, info)
+        return root.products.visible_to_user(info.context.user)
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
@@ -695,25 +731,29 @@ class ProductType(CountableDjangoObjectType, MetadataObjectType):
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_private_meta(root, _info):
+    def resolve_private_meta(root: models.ProductType, _info):
         return resolve_private_meta(root, _info)
 
     @staticmethod
-    def resolve_meta(root, _info):
+    def resolve_meta(root: models.ProductType, _info):
         return resolve_meta(root, _info)
 
     @staticmethod
     def __resolve_reference(root, _info, **_kwargs):
         return graphene.Node.get_node_from_global_id(_info, root.id)
 
+    @staticmethod
+    def resolve_weight(root: models.ProductType, _info, **_kwargs):
+        return convert_weight_to_default_weight_unit(root.weight)
+
 
 @key(fields="id")
-class Collection(CountableDjangoObjectType, MetadataObjectType):
-    products = gql_optimizer.field(
-        PrefetchingConnectionField(
-            Product, description="List of products in this collection."
-        ),
-        prefetch_related=prefetch_products_collection_sorted,
+class Collection(CountableDjangoObjectType):
+    products = PrefetchingConnectionField(
+        Product,
+        filter=ProductFilterInput(description="Filtering options for products."),
+        sort_by=ProductOrder(description="Sort products."),
+        description="List of products in this collection.",
     )
     background_image = graphene.Field(
         Image, size=graphene.Int(description="Size of the image.")
@@ -733,7 +773,7 @@ class Collection(CountableDjangoObjectType, MetadataObjectType):
             "seo_title",
             "slug",
         ]
-        interfaces = [relay.Node]
+        interfaces = [relay.Node, ObjectWithMetadata]
         model = models.Collection
 
     @staticmethod
@@ -748,27 +788,24 @@ class Collection(CountableDjangoObjectType, MetadataObjectType):
             )
 
     @staticmethod
-    def resolve_products(root: models.Collection, info, **_kwargs):
-        if hasattr(root, "prefetched_products"):
-            return root.prefetched_products  # type: ignore
-        qs = root.products.collection_sorted(info.context.user)
-        return gql_optimizer.query(qs, info)
+    def resolve_products(root: models.Collection, info, first=None, **kwargs):
+        return root.products.collection_sorted(info.context.user)
 
     @classmethod
     def get_node(cls, info, id):
         if info.context:
-            user = info.context.user
-            qs = cls._meta.model.objects.visible_to_user(user)
-            return cls.maybe_optimize(info, qs, id)
+            requestor = get_user_or_app_from_context(info.context)
+            qs = cls._meta.model.objects.visible_to_user(requestor)
+            return qs.filter(id=id).first()
         return None
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_private_meta(root, _info):
+    def resolve_private_meta(root: models.Collection, _info):
         return resolve_private_meta(root, _info)
 
     @staticmethod
-    def resolve_meta(root, _info):
+    def resolve_meta(root: models.Collection, _info):
         return resolve_meta(root, _info)
 
     @staticmethod
@@ -777,18 +814,17 @@ class Collection(CountableDjangoObjectType, MetadataObjectType):
 
 
 @key(fields="id")
-class Category(CountableDjangoObjectType, MetadataObjectType):
+class Category(CountableDjangoObjectType):
     ancestors = PrefetchingConnectionField(
         lambda: Category, description="List of ancestors of the category."
     )
-    products = gql_optimizer.field(
-        PrefetchingConnectionField(
-            Product, description="List of products in the category."
-        ),
-        prefetch_related=prefetch_products,
+    products = PrefetchingConnectionField(
+        Product, description="List of products in the category."
     )
-    # Deprecated. To remove in #5022
-    url = graphene.String(description="The storefront's URL for the category.")
+    url = graphene.String(
+        description="The storefront's URL for the category.",
+        deprecation_reason="This field will be removed after 2020-07-31.",
+    )
     children = PrefetchingConnectionField(
         lambda: Category, description="List of children of the category."
     )
@@ -814,13 +850,12 @@ class Category(CountableDjangoObjectType, MetadataObjectType):
             "seo_title",
             "slug",
         ]
-        interfaces = [relay.Node]
+        interfaces = [relay.Node, ObjectWithMetadata]
         model = models.Category
 
     @staticmethod
     def resolve_ancestors(root: models.Category, info, **_kwargs):
-        qs = root.get_ancestors()
-        return gql_optimizer.query(qs, info)
+        return root.get_ancestors()
 
     @staticmethod
     def resolve_background_image(root: models.Category, info, size=None, **_kwargs):
@@ -835,35 +870,28 @@ class Category(CountableDjangoObjectType, MetadataObjectType):
 
     @staticmethod
     def resolve_children(root: models.Category, info, **_kwargs):
-        qs = root.children.all()
-        return gql_optimizer.query(qs, info)
+        return root.children.all()
 
-    # Deprecated. To remove in #5022
     @staticmethod
     def resolve_url(root: models.Category, _info):
-        return root.get_absolute_url()
+        return ""
 
     @staticmethod
     def resolve_products(root: models.Category, info, **_kwargs):
-        # If the category has no children, we use the prefetched data.
-        children = root.children.all()
-        if not children and hasattr(root, "prefetched_products"):
-            return root.prefetched_products
-
-        # Otherwise we want to include products from child categories which
-        # requires performing additional logic.
+        requestor = get_user_or_app_from_context(info.context)
         tree = root.get_descendants(include_self=True)
         qs = models.Product.objects.published()
-        qs = qs.filter(category__in=tree)
-        return gql_optimizer.query(qs, info)
+        if not qs.user_has_access_to_all(requestor):
+            qs = qs.exclude(visible_in_listings=False)
+        return qs.filter(category__in=tree)
 
     @staticmethod
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_private_meta(root, _info):
+    def resolve_private_meta(root: models.Category, _info):
         return resolve_private_meta(root, _info)
 
     @staticmethod
-    def resolve_meta(root, _info):
+    def resolve_meta(root: models.Category, _info):
         return resolve_meta(root, _info)
 
     @staticmethod
@@ -896,15 +924,3 @@ class ProductImage(CountableDjangoObjectType):
     @staticmethod
     def __resolve_reference(root, _info, **_kwargs):
         return graphene.Node.get_node_from_global_id(_info, root.id)
-
-
-class MoveProductInput(graphene.InputObjectType):
-    product_id = graphene.ID(
-        description="The ID of the product to move.", required=True
-    )
-    sort_order = graphene.Int(
-        description=(
-            "The relative sorting position of the product (from -inf to +inf) "
-            "starting from the first given product's actual position."
-        )
-    )

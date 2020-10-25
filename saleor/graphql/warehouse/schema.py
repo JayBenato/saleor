@@ -1,32 +1,19 @@
 import graphene
-import graphene_django_optimizer as gql_optimizer
-from django.db.models import QuerySet
 
-from ...core.permissions import ProductPermissions
+from ...core.permissions import OrderPermissions, ProductPermissions
 from ...warehouse import models
 from ..core.fields import FilterInputConnectionField
-from ..decorators import permission_required
+from ..decorators import one_of_permissions_required, permission_required
 from .filters import StockFilterInput, WarehouseFilterInput
 from .mutations import (
-    StockBulkDelete,
-    StockCreate,
-    StockDelete,
-    StockUpdate,
     WarehouseCreate,
     WarehouseDelete,
-    WarehouseUpdate,
     WarehouseShippingZoneAssign,
     WarehouseShippingZoneUnassign,
+    WarehouseUpdate,
 )
-from ..utils import sort_queryset
-from .sorters import WarehouseSortField, WarehouseSortingInput
+from .sorters import WarehouseSortingInput
 from .types import Stock, Warehouse
-
-
-def sort_warehouses(qs: QuerySet, sort_by: WarehouseSortingInput) -> QuerySet:
-    if sort_by:
-        return sort_queryset(qs, sort_by, WarehouseSortField)
-    return qs.order_by("name")
 
 
 class WarehouseQueries(graphene.ObjectType):
@@ -44,17 +31,19 @@ class WarehouseQueries(graphene.ObjectType):
         sort_by=WarehouseSortingInput(),
     )
 
-    @permission_required(ProductPermissions.MANAGE_PRODUCTS)
+    @one_of_permissions_required(
+        [ProductPermissions.MANAGE_PRODUCTS, OrderPermissions.MANAGE_ORDERS]
+    )
     def resolve_warehouse(self, info, **data):
         warehouse_pk = data.get("id")
         warehouse = graphene.Node.get_node_from_global_id(info, warehouse_pk, Warehouse)
         return warehouse
 
-    @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_warehouses(self, info, sort_by=None, **kwargs):
-        qs = models.Warehouse.objects.all()
-        qs = sort_warehouses(qs, sort_by)
-        return gql_optimizer.query(qs, info)
+    @one_of_permissions_required(
+        [ProductPermissions.MANAGE_PRODUCTS, OrderPermissions.MANAGE_ORDERS]
+    )
+    def resolve_warehouses(self, info, **_kwargs):
+        return models.Warehouse.objects.all()
 
 
 class WarehouseMutations(graphene.ObjectType):
@@ -82,13 +71,5 @@ class StockQueries(graphene.ObjectType):
         return stock
 
     @permission_required(ProductPermissions.MANAGE_PRODUCTS)
-    def resolve_stocks(self, info, **data):
-        qs = models.Stock.objects.all()
-        return gql_optimizer.query(qs, info)
-
-
-class StockMutations(graphene.ObjectType):
-    create_stock = StockCreate.Field()
-    update_stock = StockUpdate.Field()
-    delete_stock = StockDelete.Field()
-    bulk_delete_stock = StockBulkDelete.Field()
+    def resolve_stocks(self, info, **_kwargs):
+        return models.Stock.objects.all()

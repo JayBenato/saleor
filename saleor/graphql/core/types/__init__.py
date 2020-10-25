@@ -4,13 +4,12 @@ from .common import (
     Error,
     Image,
     LanguageDisplay,
-    PermissionDisplay,
+    Permission,
     SeoInput,
     TaxType,
     Weight,
 )
 from .filter_input import FilterInputObjectType
-from .meta import MetadataObjectType, MetaInput, MetaPath
 from .money import VAT, Money, MoneyRange, ReducedRate, TaxedMoney, TaxedMoneyRange
 from .sort_input import SortInputObjectType
 from .upload import Upload

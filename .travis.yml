@@ -5,11 +5,6 @@ sudo: false
 python:
   - "3.8"
 
-branches:
-  only:
-    - master
-    - /next\/.*/
-
 cache:
   pip: true
   directories:
@@ -22,10 +17,16 @@ install:
   - git clone https://github.com/NyanKiyoshi/pytest-django-queries-ci-tools.git --depth 1 ../queries-ci-tools
   - >
     if [ -n "$DJANGO" ]; then
-      nvm install 10 \
-        && npm i \
-        && npm run build-emails
-    fi
+      cp -r templates/templated_email/compiled ./compiled;
+      nvm install 10;
+      npm i;
+      npm run build-emails;
+      DIFF=$(diff -q ./compiled templates/templated_email/compiled);
+      if [ "$DIFF" ]; then
+        echo "Precompiled emails check failure - make sure you executed: npm run build-emails.";
+        travis_terminate 1;
+      fi;
+    fi;
 
 script:
   - tox
@@ -34,10 +35,9 @@ env:
   global:
     - DATABASE_URL="postgres://postgres@localhost:5432/saleor"
     - SECRET_KEY="irrelevant"
-    - DIFF_RESULTS_BASE_URL="http://dhrwmpu5reeyd.cloudfront.net"
     - QUERIES_RESULTS_PATH=/tmp/queries-results.json
   matrix:
-    - DJANGO="2.2"
+    - DJANGO="3.1"
     - DJANGO="master"
 
 matrix:
@@ -55,15 +55,17 @@ matrix:
       python: "3.8"
     - env: TOXENV=pydocstyle
       python: "3.8"
+    - env: TOXENV=isort
+      python: "3.8"
   allow_failures:
-    - python: "3.8"
-      env: DJANGO="master"
+    - env: DJANGO="master"
+      python: "3.8"
 
 services:
   - postgresql
 
 addons:
-  postgresql: 9.4
+  postgresql: 9.6
 
 after_success:
   - ../queries-ci-tools/handle-event.sh

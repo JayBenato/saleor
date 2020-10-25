@@ -1,5 +1,6 @@
 import operator
 from functools import reduce
+from typing import Optional
 
 from django.db.models.query_utils import Q
 from prices import Money
@@ -8,12 +9,15 @@ from ...discount.utils import fetch_active_discounts
 from ..models import Product
 
 
-def _get_product_minimal_variant_price(product, discounts) -> Money:
+def _get_product_minimal_variant_price(product, discounts) -> Optional[Money]:
     # Start with the product's price as the minimal one
-    minimal_variant_price = product.price
+    minimal_variant_price = None
     for variant in product.variants.all():
         variant_price = variant.get_price(discounts=discounts)
-        minimal_variant_price = min(minimal_variant_price, variant_price)
+        if minimal_variant_price is None:
+            minimal_variant_price = variant_price
+        else:
+            minimal_variant_price = min(minimal_variant_price, variant_price)
     return minimal_variant_price
 
 
@@ -58,18 +62,12 @@ def update_products_minimal_variant_prices_of_catalogues(
     if collection_ids:
         q_list.append(Q(collectionproduct__collection_id__in=collection_ids))
     # Asserting that the function was called with some ids
-    if not q_list:
-        raise ValueError(
-            "Provide at least one of the ID lists:\n"
-            "\tproduct_ids,\n"
-            "\tcategory_ids,\n"
-            "\tcollection_ids."
-        )
-    # Querying the products
-    q_or = reduce(operator.or_, q_list)
-    products = Product.objects.filter(q_or).distinct()
+    if q_list:
+        # Querying the products
+        q_or = reduce(operator.or_, q_list)
+        products = Product.objects.filter(q_or).distinct()
 
-    update_products_minimal_variant_prices(products)
+        update_products_minimal_variant_prices(products)
 
 
 def update_products_minimal_variant_prices_of_discount(discount):
