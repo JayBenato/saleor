@@ -19,7 +19,7 @@ urlpatterns = [
         digital_product,
         name="digital-product",
     ),
-    url(r"^danea/", danea.process, name="danea"),
+    url(r"^danea/(?P<token>[0-9A-Za-z_\-]+)/$", danea.process, name="danea"),
     url(
         r"plugins/(?P<plugin_id>[.0-9A-Za-z_\-]+)/",
         handle_plugin_webhook,

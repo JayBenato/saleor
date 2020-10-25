@@ -192,6 +192,8 @@ class Utils:
             return 'grey'
         elif color.startswith('mr'):
             return 'brown'
+        elif color.startswith('am') :
+            return 'yellow'
         else:
             return None
 

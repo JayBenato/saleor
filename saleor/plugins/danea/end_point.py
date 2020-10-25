@@ -1,16 +1,17 @@
 from xml.etree import ElementTree
 
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpRequest
 import logging
+
+from saleor.account.models import User
 from saleor.plugins.danea.xml_converter import process_product_xml, \
     create_orders
-from django.contrib.auth import authenticate
 
 logger = logging.getLogger(__name__)
 
 
-def process(request):
-    if auth(request):
+def process(request, token: str):
+    if auth(token):
         if request.method == 'POST':
             file = request.FILES.get('file')
             logger.info("Processing danea request...")
@@ -26,15 +27,12 @@ def process(request):
             return HttpResponse(ElementTree.tostring(file),
                                 content_type='application/xml')
     else:
-        return HttpResponse("Wrong user credentials", status=404)
+        return HttpResponse("Wrong user credentials", status=200)
 
 
 def auth(request):
-    logger.info('Authenticating request on danea endpoint...')
-    username = request.POST['username']
-    password = request.POST['password']
-    user = authenticate(username=username, password=password)
-    if user is not None:
-        logger.info("User authenticated on danea endpoint ", user)
+    logger.error(request)
+    if User.objects.get(email='direzione@todajoia.it').check_password(request):
+        logger.info("User authenticated on danea endpoint ")
         return True
     return False
