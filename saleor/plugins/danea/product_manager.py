@@ -192,7 +192,7 @@ class Utils:
             return 'grey'
         elif color.startswith('mr'):
             return 'brown'
-        elif color.startswith('am') :
+        elif color.startswith('am'):
             return 'yellow'
         else:
             return None
@@ -223,7 +223,7 @@ class Utils:
     @staticmethod
     def parse_material(product_name: str):
         product_name = product_name.lower()
-        if 'revers' or 'lycra' or 'sublime' or 'double' in product_name:
+        if 'lycra' or 'sublime' in product_name:
             return 'lycra'
         elif 'supplex' in product_name:
             return 'supplex'
