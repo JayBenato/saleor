@@ -2,11 +2,11 @@ import dataclasses
 import logging
 import xml.etree.ElementTree as XmlParser
 from saleor.order.models import Order
-from saleor.product.models import Product, ProductVariant
+from saleor.product.models import Product, ProductVariant, AttributeValue, Collection
 from .danea_dataclass import DaneaProduct, DaneaVariant
-from .product_manager import Utils
 from .tasks import generate_product_task, update_product_task
-from ..models import DaneaOrder
+from ..models import DaneaOrder, DaneaCategoryMappings
+from ...warehouse.models import Warehouse
 
 logger = logging.getLogger(__name__)
 
@@ -15,94 +15,194 @@ def process_product_xml(path) -> []:
     tree = XmlParser.parse(path)
     root = tree.getroot()
     warehouse = root.attrib.get('Warehouse')
-    discarted_products = []
+    discarted_products = [str]
+    if not validate_warehouse(warehouse):
+        return discarted_products.append('Invalid Warehouse =' + warehouse)
     for child in root.iter('Product'):
-        product = DaneaProduct()
-        product.original_name = child.find('Description').text
-        product.name = child.find('Description').text.replace('\n', '')
-        logger.info('Parsing product: ' + product.name)
-        product.type = Utils.parse_type(product.name)
-        if product.type is None:
-            product.name = product.name + "(ERROR: PRODUCT TYPE)"
-            logger.error('Unable to find type for')
-
-        product.category = Utils.parse_category(product.name)
-        if product.category is None:
-            product.name = product.name + "(ERROR: CATEGORY)"
-            logger.error('Unable to find category for')
-
-        product.rm_code = Utils.extract_rm_code(product.name)
-        if product.rm_code is None:
-            product.name = product.name + "(ERROR: RMCODE)"
-            logger.error('Unable to get rm code')
-
-        product.original_color = child.find('Variants').find('Variant').find(
-            'Color').text
-        product.color = Utils.parse_color(product.original_color)
-        if product.color is None:
-            product.name = product.name + "(ERROR: PRODUCT COLOR)"
-            logger.error('Unable to parse color')
-
-        product.material = Utils.parse_material(product.name)
-        if product.material is None:
-            product.material = 'None'
-        product.collection = Utils.parse_collection(product.name)
-        if product.collection is None:
-            product.collection = 'None'
-        if product.type is not None \
-                and product.category is not None \
-                and product.rm_code is not None \
-                and product.color is not None:
-            product.name = Utils.clean_name(product.name)
-            product.code = child.find('Code').text
-            product.internal_id = child.find('InternalID').text
-            product.gross_price = child.find('GrossPrice1').text
-            product.net_price = child.find('NetPrice1').text
-
-            try:
-                product.sale_price = child.find('GrossPrice2').text
-            except:
-                product.sale_price = 0
-            try:
-                product.r120_price = child.find('GrossPrice3').text
-            except:
-                product.r120_price = 0
-            try:
-                product.r110_price = child.find('GrossPrice4').text
-            except:
-                product.r110_price = 0
-            try:
-                product.r100_price = child.find('GrossPrice5').text
-            except:
-                product.r100_price = 0
-            try:
-                product.web_price = child.find('GrossPrice6').text
-            except:
-                product.web_price = 0
-            try:
-                product.rm_collection = child.find('CustomField3').text
-            except:
-                product.rm_collection = 'None'
+        product = extract_product(child)
+        if check_for_errors(product):
+            product.name = clean_name(product.name)
+            extract_private_metadata(child, product)
             product.variants = []
             for variant in child.find('Variants').iter('Variant'):
                 danea_variant = DaneaVariant()
-                danea_variant.barcode = variant.find('Barcode').text
-                danea_variant.qty = variant.find('AvailableQty').text
-                danea_variant.size = variant.find('Size').text
+                extract_variant(danea_variant, variant)
                 product.variants.append(danea_variant)
-            logger.info('Product successfully parsed.')
-            if Product.objects.filter(slug=product.code).exists():
-                # Async celery task
-                product = dataclasses.asdict(product)
-                update_product_task.delay(product, warehouse)
+            if len(product.variants) <= 4:
+                if Product.objects.filter(slug=product.code).exists():
+                    product = dataclasses.asdict(product)
+                    update_product_task.delay(product, warehouse)
+                else:
+                    product = dataclasses.asdict(product)
+                    generate_product_task.delay(product, warehouse)
             else:
-                # Async celery task
-                product = dataclasses.asdict(product)
-                generate_product_task.delay(product, warehouse)
+                discarted_products.append(product.name + "(ERROR: VARIANT NR)")
         else:
             discarted_products.append(product.name)
-            logger.error('Error parsing product, product has been discarted.')
     return discarted_products
+
+
+def extract_variant(danea_variant, variant):
+    danea_variant.barcode = variant.find('Barcode').text
+    danea_variant.qty = variant.find('AvailableQty').text
+    danea_variant.size = parse_size(variant.find('Size').text)
+
+
+def parse_size(product_name: str) -> str:
+    product_name = product_name.lower()
+    if 's' in product_name or 'p' in product_name:
+        return 's'
+    elif 'm' in product_name:
+        return 'm'
+    elif 'l' in product_name or 'g' in product_name:
+        return 'l'
+    else:
+        return 'xl'
+
+
+def extract_private_metadata(child, product):
+    product.code = child.find('Code').text
+    product.internal_id = child.find('InternalID').text
+    product.gross_price = child.find('GrossPrice1').text
+    product.net_price = child.find('NetPrice1').text
+    try:
+        product.sale_price = child.find('GrossPrice2').text
+    except:
+        product.sale_price = 0
+    try:
+        product.r120_price = child.find('GrossPrice3').text
+    except:
+        product.r120_price = 0
+    try:
+        product.r110_price = child.find('GrossPrice4').text
+    except:
+        product.r110_price = 0
+    try:
+        product.r100_price = child.find('GrossPrice5').text
+    except:
+        product.r100_price = 0
+    try:
+        product.web_price = child.find('GrossPrice6').text
+    except:
+        product.web_price = 0
+
+
+def check_for_errors(product: DaneaProduct) -> bool:
+    return product.type is not None and product.category is not None \
+           and product.rm_code is not None and product.color is not None \
+           and product.material is not None
+
+
+def extract_product(child) -> DaneaProduct:
+    product = DaneaProduct()
+    product.original_name = child.find('Description').text
+    product.name = child.find('Description').text.replace('\n', '')
+    logger.info('Parsing product: ' + product.name)
+    extract_type_and_category(child, product)
+    extract_rm_code(child, product)
+    extract_color(child, product)
+    extract_material(child, product)
+    extract_collection(child, product)
+    return product
+
+
+def extract_material(child, product):
+    try:
+        material = child.find("Subcategory").text
+        attribute = AttributeValue.objects.get(slug=material.lower())
+        product.material = attribute.slug
+    except:
+        product.material = None
+        product.name = product.name + "(ERROR: PRODUCT MATERIAL)"
+
+
+def extract_collection(child, product):
+    try:
+        product.collection = child.find('WarehouseLocation').text
+        if not Collection.objects.filter(slug=product.collection).exists():
+            product.collection = parse_collection(product.name)
+    except:
+        product.collection = 'None'
+
+
+def parse_collection(product_name: str):
+    product_name = product_name.lower()
+    if 'reverse' in product_name or 'double' in product_name:
+        return 'reverse'
+    if 'jeans' in product_name:
+        return 'fake-jeans'
+    return 'None'
+
+
+def extract_type_and_category(child, product):
+    try:
+        category = child.find('Category').text
+        if category is not None:
+            mapping = DaneaCategoryMappings.objects.get(danea_field=category)
+            product.type = mapping.saleor_type_slug
+            product.category = mapping.saleor_category_slug
+    except:
+        product.type = None
+        product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"
+
+
+def extract_color(child, product):
+    product.original_color = child.find('Variants').find('Variant').find(
+        'Color').text
+    product.color = parse_color(product.original_color)
+    if product.color is None:
+        product.name = product.name + "(ERROR: PRODUCT COLOR)"
+
+
+def parse_color(color: str):
+    color = color.lower()
+    if 'dg' in color or 'sb' in color or 'es' in color:
+        return 'multicolor'
+    elif color.startswith('pt') or color.startswith('01'):
+        return 'black'
+    elif color.startswith('vm'):
+        return 'red'
+    elif color.startswith('vd'):
+        return 'green'
+    elif color.startswith('az'):
+        return 'blue'
+    elif color.startswith('lj'):
+        return 'orange'
+    elif color.startswith('bc'):
+        return 'white'
+    elif color.startswith('rs'):
+        return 'pink'
+    elif color.startswith('bd') or color.startswith('rx'):
+        return 'bordeaux'
+    elif color.startswith('me') or color.startswith('cz'):
+        return 'grey'
+    elif color.startswith('mr'):
+        return 'brown'
+    elif color.startswith('am'):
+        return 'yellow'
+    else:
+        return None
+
+
+def extract_rm_code(child, product):
+    product.rm_code = parse_code(product.name)
+    if product.rm_code is None:
+        product.name = product.name + "(ERROR: RMCODE)"
+    product.original_color = child.find('Variants').find('Variant').find(
+        'Color').text
+
+
+def parse_code(product_name: str):
+    index = product_name.find('(')
+    code = ''
+    if index > -1:
+        index += 1
+        while product_name[index] != ')':
+            code += product_name[index]
+            index += 1
+    else:
+        return None
+    return code
 
 
 def create_orders():
@@ -146,9 +246,9 @@ def process_order(order: Order):
         row.find('Description').text = variant.product.private_metadata.get(
             'original_name')
         row.find('Code').text = variant.product.slug
-        price = variant.product.price.amount * order_line.quantity
+        price = variant.price_amount * order_line.quantity
         row.find('Price').text = price.__str__()
-        discount_amout = variant.product.price.amount * order_line.quantity - order_line.get_total().gross.amount
+        discount_amout = variant.price_amount * order_line.quantity - order_line.get_total().gross.amount
         discount_percentage = 100 * discount_amout / price
         row.find('Discounts').text = discount_percentage.__str__()
         row.find('Color').text = variant.product.private_metadata.get('original_color')
@@ -273,3 +373,22 @@ def create_payment():
     XmlParser.SubElement(row, 'Amount')
     XmlParser.SubElement(row, 'Paid')
     return row
+
+
+def clean_name(product: str) -> str:
+    p = product
+    product_name: str = ''
+    index: int = 0
+    end = p.find('(')
+    if end > -1:
+        while index < end:
+            product_name += p[index]
+            index += 1
+        p = product_name
+    else:
+        logger.error('Not able to clean name :' + p)
+    return p
+
+
+def validate_warehouse(warehouse: str) -> bool:
+    return Warehouse.objects.filter(slug=warehouse.lower()).exists

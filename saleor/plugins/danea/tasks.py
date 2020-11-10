@@ -1,7 +1,6 @@
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .product_manager import generate_product, update_product
 from ...celeryconf import app
-from ...graphql.core.types import Money
 
 
 @app.task
