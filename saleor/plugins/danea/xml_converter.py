@@ -121,8 +121,9 @@ def extract_collection(child, product):
         product.collection = child.find('WarehouseLocation').text
         if not Collection.objects.filter(slug=product.collection).exists():
             product.collection = parse_collection(product.name)
+
     except:
-        product.collection = 'None'
+        product.collection = 'N'
 
 
 def parse_collection(product_name: str):
@@ -131,7 +132,7 @@ def parse_collection(product_name: str):
         return 'reverse'
     if 'jeans' in product_name:
         return 'fake-jeans'
-    return 'None'
+    return 'N'
 
 
 def extract_type_and_category(child, product):

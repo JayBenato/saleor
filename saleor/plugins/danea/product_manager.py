@@ -127,6 +127,6 @@ def find_and_associate_material(persisted_product, material):
 
 
 def insert_product_into_collection(persisted_product, collection):
-    if collection != 'None':
+    if collection is not 'N':
         collection = Collection.objects.get(slug=collection)
         collection.products.add(persisted_product)
