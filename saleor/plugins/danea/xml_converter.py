@@ -26,10 +26,9 @@ def process_product_xml(path) -> []:
             extract_private_metadata(child, product)
             product.variants = []
             for variant in child.find('Variants').iter('Variant'):
-                danea_variant = DaneaVariant()
-                extract_variant(danea_variant, variant)
+                danea_variant = extract_variant(variant)
                 product.variants.append(danea_variant)
-            if len(product.variants) <= 4:
+            if len(product.variants) <= 4 or danea_variant.size is None:
                 if Product.objects.filter(slug=product.code).exists():
                     product = dataclasses.asdict(product)
                     update_product_task.delay(product, warehouse)
@@ -43,13 +42,15 @@ def process_product_xml(path) -> []:
     return discarted_products
 
 
-def extract_variant(danea_variant, variant):
+def extract_variant(variant):
+    danea_variant: DaneaVariant = DaneaVariant()
     danea_variant.barcode = variant.find('Barcode').text
     danea_variant.qty = variant.find('AvailableQty').text
     danea_variant.size = parse_size(variant.find('Size').text)
+    return danea_variant
 
 
-def parse_size(size: str) -> str:
+def parse_size(size: str):
     size = size.lower()
     if size == 's' or size == 'p':
         return 's'
@@ -57,8 +58,10 @@ def parse_size(size: str) -> str:
         return 'm'
     elif size == 'l' or size == 'g':
         return 'l'
-    else:
+    elif size == 'lg' or size == 'xl':
         return 'xl'
+    else:
+        return None
 
 
 def extract_private_metadata(child, product):
