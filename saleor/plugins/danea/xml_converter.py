@@ -108,17 +108,18 @@ def extract_product(child) -> DaneaProduct:
 
 def extract_material(child, product):
     try:
-        material = child.find("Subcategory").text
-        attribute = AttributeValue.objects.get(slug=material.lower())
+        material = child.find("Subcategory").text.lower()
+        attribute = AttributeValue.objects.get(slug=material)
         product.material = attribute.slug
     except:
         product.material = None
         product.name = product.name + "(ERROR: PRODUCT MATERIAL)"
+        logger.error("Unable to parse material")
 
 
 def extract_collection(child, product):
     try:
-        product.collection = child.find('WarehouseLocation').text
+        product.collection = child.find('WarehouseLocation').text.lower()
         if not Collection.objects.filter(slug=product.collection).exists():
             product.collection = parse_collection(product.name)
 
@@ -132,12 +133,13 @@ def parse_collection(product_name: str):
         return 'reverse'
     if 'jeans' in product_name:
         return 'fake-jeans'
+    logger.error("Unable to parse collection")
     return 'N'
 
 
 def extract_type_and_category(child, product):
     try:
-        category = child.find('Category').text
+        category = child.find('Category').text.lower()
         if category is not None:
             mapping = DaneaCategoryMappings.objects.get(danea_field=category)
             product.type = mapping.saleor_type_slug
@@ -145,6 +147,7 @@ def extract_type_and_category(child, product):
     except:
         product.type = None
         product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"
+        logger.error("Unable to parse type/category")
 
 
 def extract_color(child, product):
@@ -153,6 +156,7 @@ def extract_color(child, product):
     product.color = parse_color(product.original_color)
     if product.color is None:
         product.name = product.name + "(ERROR: PRODUCT COLOR)"
+        logger.error("Unable to parse color")
 
 
 def parse_color(color: str):
