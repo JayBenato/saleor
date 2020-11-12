@@ -142,11 +142,10 @@ def parse_collection(product_name: str):
 
 def extract_type_and_category(child, product: DaneaProduct):
     try:
-        category = child.find('Category').text.lower()
+        category = child.find('Category').text.strip().lower()
         mapping = DaneaCategoryMappings.objects.get(danea_field=category)
-        logger.info("Type/Category =" + mapping.saleor_type_slug + "/"+ mapping.saleor_category_slug)
-        product.type = mapping.saleor_type_slug
-        product.category = mapping.saleor_category_slug
+        product.type = mapping.saleor_type_slug.strip().lower()
+        product.category = mapping.saleor_category_slug.strip().lower()
     except:
         product.type = None
         product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"
