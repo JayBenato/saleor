@@ -2,7 +2,8 @@ import dataclasses
 import logging
 import xml.etree.ElementTree as XmlParser
 from saleor.order.models import Order
-from saleor.product.models import Product, ProductVariant, AttributeValue, Collection
+from saleor.product.models import Product, ProductVariant, AttributeValue, Collection, \
+    Category, ProductType
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task
 from ..models import DaneaOrder, DaneaCategoryMappings
@@ -48,13 +49,13 @@ def extract_variant(danea_variant, variant):
     danea_variant.size = parse_size(variant.find('Size').text)
 
 
-def parse_size(product_name: str) -> str:
-    product_name = product_name.lower()
-    if 's' in product_name or 'p' in product_name:
+def parse_size(size: str) -> str:
+    size = size.lower()
+    if size == 's' or size == 'p':
         return 's'
-    elif 'm' in product_name:
+    elif size == 'm':
         return 'm'
-    elif 'l' in product_name or 'g' in product_name:
+    elif size == 'l' or size == 'g':
         return 'l'
     else:
         return 'xl'
@@ -139,11 +140,18 @@ def parse_collection(product_name: str):
 
 def extract_type_and_category(child, product):
     try:
-        category = child.find('Category').text.lower()
+        category = child.find('Category').text
+        logger.info("Parsing category :" + category)
         if category is not None:
-            mapping = DaneaCategoryMappings.objects.get(danea_field=category)
-            product.type = mapping.saleor_type_slug
-            product.category = mapping.saleor_category_slug
+            mapping = DaneaCategoryMappings.objects.get(danea_field=category.lower())
+            if Category.objects.filter(slug=mapping.saleor_category_slug).exists() and \
+                    ProductType.objects.filter(slug=mapping.saleor_type_slug).exists():
+                product.type = mapping.saleor_type_slug
+                product.category = mapping.saleor_category_slug
+            else:
+                product.type = None
+                product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"
+                logger.error("Unable to find type/category")
     except:
         product.type = None
         product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"

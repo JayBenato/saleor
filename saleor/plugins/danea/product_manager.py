@@ -61,8 +61,8 @@ def store_private_meta(persisted_product, product):
 
 def generate_product(product: DaneaProduct, warehouse: str):
     warehouse = find_warehouse(warehouse)
-    product_type = ProductType.objects.get(slug=product.type)
-    category = Category.objects.get(slug=product.category)
+    product_type = ProductType.objects.get(slug=product.type.lower())
+    category = Category.objects.get(slug=product.category.lower())
     persisted_product = Product.objects.create(
         name=product.name + ' (' + product.rm_code + ')',
         slug=product.code,
