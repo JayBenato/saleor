@@ -1,8 +1,7 @@
 from xml.etree import ElementTree
 
-from django.http import HttpResponse, HttpRequest
+from django.http import HttpResponse
 import logging
-
 from saleor.account.models import User
 from saleor.plugins.danea.xml_converter import process_product_xml, \
     create_orders

@@ -112,8 +112,8 @@ def extract_product(child) -> DaneaProduct:
 
 def extract_material(child, product):
     try:
-        material = child.find("Subcategory").text.lower()
-        attribute = AttributeValue.objects.get(slug=material)
+        material = child.find("Subcategory").text
+        attribute = AttributeValue.objects.get(slug=material.lower())
         product.material = attribute.slug
     except:
         product.material = None
@@ -126,7 +126,6 @@ def extract_collection(child, product):
         product.collection = child.find('WarehouseLocation').text.lower()
         if not Collection.objects.filter(slug=product.collection).exists():
             product.collection = parse_collection(product.name)
-
     except:
         product.collection = 'N'
 
@@ -141,27 +140,19 @@ def parse_collection(product_name: str):
     return 'N'
 
 
-def extract_type_and_category(child, product):
+def extract_type_and_category(child, product: DaneaProduct):
     try:
         category = child.find('Category').text
-        logger.info("Parsing category :" + category)
-        if category is not None:
-            mapping = DaneaCategoryMappings.objects.get(danea_field=category.lower())
-            if Category.objects.filter(slug=mapping.saleor_category_slug).exists() and \
-                    ProductType.objects.filter(slug=mapping.saleor_type_slug).exists():
-                product.type = mapping.saleor_type_slug
-                product.category = mapping.saleor_category_slug
-            else:
-                product.type = None
-                product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"
-                logger.error("Unable to find type/category")
+        mapping = DaneaCategoryMappings.objects.get(danea_field=category.lower())
+        product.type = mapping.saleor_type_slug
+        product.category = mapping.saleor_category_slug
     except:
         product.type = None
         product.name = product.name + "(ERROR: PRODUCT TYPE/CATEGORY)"
         logger.error("Unable to parse type/category")
 
 
-def extract_color(child, product):
+def extract_color(child, product: DaneaProduct):
     product.original_color = child.find('Variants').find('Variant').find(
         'Color').text
     product.color = parse_color(product.original_color)
@@ -200,7 +191,7 @@ def parse_color(color: str):
         return None
 
 
-def extract_rm_code(child, product):
+def extract_rm_code(child, product: DaneaProduct):
     product.rm_code = parse_code(product.name)
     if product.rm_code is None:
         product.name = product.name + "(ERROR: RMCODE)"
