@@ -12,7 +12,7 @@ def update_product(product: DaneaProduct, warehouse: str):
     warehouse = find_warehouse(warehouse)
     django_product: Product = Product.objects.get(slug=product.code)
     django_product.price = Money(product.gross_price, "EUR")
-    django_product.name = product.name + ' (' + product.rm_code + ')',
+    django_product.name = product.name + ' (' + product.rm_code + ')'
     django_product.updated_at = datetime.date.today()
     django_product.save()
     for variant in product.variants:

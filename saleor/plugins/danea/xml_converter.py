@@ -16,7 +16,7 @@ def process_product_xml(path) -> []:
     tree = XmlParser.parse(path)
     root = tree.getroot()
     warehouse = root.attrib.get('Warehouse')
-    discarted_products = [str]
+    discarted_products = []
     if not validate_warehouse(warehouse):
         return discarted_products.append('Invalid Warehouse =' + warehouse)
     for child in root.iter('Product'):
