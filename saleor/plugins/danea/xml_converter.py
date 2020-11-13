@@ -1,12 +1,13 @@
 import dataclasses
 import logging
 import xml.etree.ElementTree as XmlParser
-from saleor.order.models import Order
+from saleor.order.models import Order, OrderLine
 from saleor.product.models import Product, ProductVariant, AttributeValue, Collection, \
     Category, ProductType
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task
 from ..models import DaneaOrder, DaneaCategoryMappings
+from ...giftcard.models import GiftCard
 from ...warehouse.models import Warehouse
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,8 @@ def extract_variant(variant):
     danea_variant.barcode = variant.find('Barcode').text
     danea_variant.qty = variant.find('AvailableQty').text
     danea_variant.size = parse_size(variant.find('Size').text)
+    danea_variant.original_size = variant.find('Size').text
+
     return danea_variant
 
 
@@ -228,6 +231,8 @@ def process_order(order: Order):
     document = create_document()
     document.find('CustomerName').text = order.shipping_address.full_name
     document.find('CustomerTel').text = order.shipping_address.phone.__str__()
+    document.find('Number').text = order.id.__str__()
+    document.find('Numbering').text = 'Web'
     document.find('CustomerPostcode').text = order.shipping_address.postal_code
     document.find('CustomerEmail').text = order.get_customer_email()
     document.find('CustomerAddress').text = order.shipping_address.street_address_1
@@ -264,6 +269,12 @@ def process_order(order: Order):
         row.find('Um').text = 'pz'
         row.find('Stock').text = 'true'
         row.find('VatCode').text = '22'
+        rows.append(row)
+    if order.voucher.discount is not None:
+        row = create_row()
+        row.find('Description').text = 'Voucher :' + order.voucher.name
+        row.find('Price').text = str(order.voucher.discount_value * -1)
+        row.find('Qty').text = '1'
         rows.append(row)
     document.find('Rows').extend(rows)
     payments = []

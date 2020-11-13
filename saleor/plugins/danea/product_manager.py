@@ -1,6 +1,8 @@
 import datetime
 from prices import Money
 from django.db import transaction
+
+from saleor.plugins.danea.danea_dataclass import DaneaVariant
 from saleor.plugins.danea.xml_converter import DaneaProduct
 from saleor.warehouse.models import Warehouse, Stock
 from saleor.product.utils.attributes import associate_attribute_values_to_instance
@@ -40,6 +42,7 @@ def update_product(product: DaneaProduct, warehouse: str):
             else:
                 stock.quantity = 0
             stock.save()
+            store_variant_private_meta(var, variant)
 
 
 def store_private_meta(persisted_product, product):
@@ -60,6 +63,12 @@ def store_private_meta(persisted_product, product):
     persisted_product.store_value_in_private_metadata(items=private_meta)
     persisted_product.save()
 
+def store_variant_private_meta(var: ProductVariant, variant: DaneaVariant):
+    private_meta = {
+        'original_size': variant.original_size
+    }
+    var.store_value_in_private_metadata(items=private_meta)
+    var.save()
 
 def generate_product(product: DaneaProduct, warehouse: str):
     warehouse = find_warehouse(warehouse)
@@ -95,6 +104,7 @@ def generate_product(product: DaneaProduct, warehouse: str):
                 quantity=0,
             )
         find_and_associate_size(var, variant)
+        store_variant_private_meta(var, variant)
     find_and_associate_color(persisted_product, product.color)
     find_and_associate_material(persisted_product, product.material)
     insert_product_into_collection(persisted_product, product.collection)

@@ -8,6 +8,7 @@ class DaneaVariant:
     size: str
     qty: int
     barcode: str
+    original_size: str
 
 
 @dataclass(init=False, repr=True)
