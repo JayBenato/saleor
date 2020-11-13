@@ -1,3 +1,4 @@
+import datetime
 from prices import Money
 from django.db import transaction
 from saleor.plugins.danea.xml_converter import DaneaProduct
@@ -12,6 +13,7 @@ def update_product(product: DaneaProduct, warehouse: str):
     django_product: Product = Product.objects.get(slug=product.code)
     django_product.price = Money(product.gross_price, "EUR")
     django_product.name = product.name
+    django_product.updated_at = datetime.date.today()
     django_product.save()
     for variant in product.variants:
         with transaction.atomic():
@@ -69,6 +71,8 @@ def generate_product(product: DaneaProduct, warehouse: str):
         category=category,
         product_type=product_type,
         is_published=True,
+        available_for_purchase=datetime.date.today(),
+        visible_in_listings=True,
     )
     store_private_meta(persisted_product, product)
     for variant in product.variants:
