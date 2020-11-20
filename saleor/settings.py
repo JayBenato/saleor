@@ -474,6 +474,7 @@ PLUGINS = [
     "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
     "saleor.plugins.invoicing.plugin.InvoicingPlugin",
     "saleor.plugins.danea.plugin.DaneaPlugin",
+    "saleor.payment.gateways.ondelivery.plugin.OnDeliveryPlugin",
 ]
 
 # Plugin discovery

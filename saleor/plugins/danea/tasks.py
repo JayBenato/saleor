@@ -42,5 +42,6 @@ def to_danea_product(dictionary) -> DaneaProduct:
         variant.qty = var.get('qty')
         variant.size = var.get('size')
         variant.barcode = var.get('barcode')
+        variant.original_size = var.get('original_size')
         product.variants.append(variant)
     return product

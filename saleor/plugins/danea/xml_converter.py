@@ -1,13 +1,11 @@
 import dataclasses
 import logging
 import xml.etree.ElementTree as XmlParser
-from saleor.order.models import Order, OrderLine
-from saleor.product.models import Product, ProductVariant, AttributeValue, Collection, \
-    Category, ProductType
+from saleor.product.models import Product, ProductVariant, AttributeValue, Collection
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task
 from ..models import DaneaOrder, DaneaCategoryMappings
-from ...giftcard.models import GiftCard
+from ...order.models import Order
 from ...warehouse.models import Warehouse
 
 logger = logging.getLogger(__name__)
@@ -28,8 +26,11 @@ def process_product_xml(path) -> []:
             product.variants = []
             for variant in child.find('Variants').iter('Variant'):
                 danea_variant = extract_variant(variant)
-                product.variants.append(danea_variant)
-            if len(product.variants) <= 4 or danea_variant.size is None:
+                if danea_variant.size is not None and danea_variant.original_size is not None:
+                    product.variants.append(danea_variant)
+                else:
+                    discarted_products.append(product.name + "(ERROR: VARIANT SIZE)")
+            if len(product.variants) <= 4:
                 if Product.objects.filter(slug=product.code).exists():
                     product = dataclasses.asdict(product)
                     update_product_task.delay(product, warehouse)
@@ -44,12 +45,11 @@ def process_product_xml(path) -> []:
 
 
 def extract_variant(variant):
-    danea_variant: DaneaVariant = DaneaVariant()
+    danea_variant = DaneaVariant()
     danea_variant.barcode = variant.find('Barcode').text
     danea_variant.qty = variant.find('AvailableQty').text
     danea_variant.size = parse_size(variant.find('Size').text)
     danea_variant.original_size = variant.find('Size').text
-
     return danea_variant
 
 
@@ -61,7 +61,7 @@ def parse_size(size: str):
         return 'm'
     elif size == 'l' or size == 'g':
         return 'l'
-    elif size == 'lg' or size == 'xl':
+    elif size == 'lg' or size == 'xl' or size == 'gg':
         return 'xl'
     else:
         return None
@@ -270,10 +270,12 @@ def process_order(order: Order):
         row.find('Stock').text = 'true'
         row.find('VatCode').text = '22'
         rows.append(row)
-    if order.voucher.discount is not None:
+    if order.voucher:
         row = create_row()
-        row.find('Description').text = 'Voucher :' + order.voucher.name
+        row.find('Description').text = 'Voucher :' + order.voucher.code
         row.find('Price').text = str(order.voucher.discount_value * -1)
+        row.find('Um').text = 'pz'
+        row.find('Stock').text = 'true'
         row.find('Qty').text = '1'
         rows.append(row)
     document.find('Rows').extend(rows)
