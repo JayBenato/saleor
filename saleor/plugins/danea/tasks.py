@@ -1,6 +1,9 @@
+import json
+
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .product_manager import generate_product, update_product
 from ...celeryconf import app
+from ...product.models import Product
 
 
 @app.task
@@ -13,6 +16,20 @@ def generate_product_task(product, warehouse):
 def update_product_task(product, warehouse):
     product = to_danea_product(product)
     update_product(product, warehouse)
+
+
+@app.task
+def update_available_products_task(product_slugs):
+    for product in Product.objects.all():
+        active_product = False
+        for slug in product_slugs:
+            if product.slug == slug:
+                active_product = True
+                break
+        if active_product is False:
+            product.is_published = False
+            product.visible_in_listings = False
+            product.save()
 
 
 def to_danea_product(dictionary) -> DaneaProduct:

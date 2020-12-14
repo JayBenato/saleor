@@ -3,9 +3,11 @@ import logging
 import xml.etree.ElementTree as XmlParser
 from saleor.product.models import Product, ProductVariant, AttributeValue, Collection
 from .danea_dataclass import DaneaProduct, DaneaVariant
-from .tasks import generate_product_task, update_product_task
+from .tasks import generate_product_task, update_product_task, \
+    update_available_products_task
 from ..models import DaneaOrder, DaneaCategoryMappings
 from ...order.models import Order
+from ...payment.models import Payment
 from ...warehouse.models import Warehouse
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ def process_product_xml(path) -> []:
     root = tree.getroot()
     warehouse = root.attrib.get('Warehouse')
     discarted_products = []
+    danea_product_slugs = []
     if not validate_warehouse(warehouse):
         return discarted_products.append('Invalid Warehouse =' + warehouse)
     for child in root.iter('Product'):
@@ -32,15 +35,18 @@ def process_product_xml(path) -> []:
                     discarted_products.append(product.name + "(ERROR: VARIANT SIZE)")
             if len(product.variants) <= 4:
                 if Product.objects.filter(slug=product.code).exists():
+                    danea_product_slugs.append(product.code)
                     product = dataclasses.asdict(product)
                     update_product_task.delay(product, warehouse)
                 else:
+                    danea_product_slugs.append(product.code)
                     product = dataclasses.asdict(product)
                     generate_product_task.delay(product, warehouse)
             else:
                 discarted_products.append(product.name + "(ERROR: VARIANT NR)")
         else:
             discarted_products.append(product.name)
+    update_available_products_task.delay(danea_product_slugs)
     return discarted_products
 
 
@@ -102,15 +108,18 @@ def check_for_errors(product: DaneaProduct) -> bool:
 
 def extract_product(child) -> DaneaProduct:
     product = DaneaProduct()
-    product.original_name = child.find('Description').text
-    product.name = child.find('Description').text.replace('\n', '')
-    logger.info('Parsing product: ' + product.name)
+    extract_name(child, product)
     extract_type_and_category(child, product)
     extract_rm_code(child, product)
     extract_color(child, product)
     extract_material(child, product)
     extract_collection(child, product)
     return product
+
+
+def extract_name(child, product):
+    product.original_name = child.find('Description').text
+    product.name = child.find('Description').text.replace('\n', '')
 
 
 def extract_material(child, product):
@@ -137,10 +146,10 @@ def parse_collection(product_name: str):
     product_name = product_name.lower()
     if 'reverse' in product_name or 'double' in product_name:
         return 'reverse'
-    if 'jeans' in product_name:
+    elif 'jeans' in product_name:
         return 'fake-jeans'
-    logger.error("Unable to parse collection")
-    return 'N'
+    else:
+        return 'N'
 
 
 def extract_type_and_category(child, product: DaneaProduct):
@@ -166,7 +175,7 @@ def extract_color(child, product: DaneaProduct):
 
 def parse_color(color: str):
     color = color.lower()
-    if 'dg' in color or 'sb' in color or 'es' in color:
+    if color.startswith('dg') or color.startswith('sb') or color.startswith('es'):
         return 'multicolor'
     elif color.startswith('pt') or color.startswith('01'):
         return 'black'
@@ -190,6 +199,8 @@ def parse_color(color: str):
         return 'brown'
     elif color.startswith('am'):
         return 'yellow'
+    elif color.startswith('fr'):
+        return 'rust'
     else:
         return None
 
@@ -198,8 +209,6 @@ def extract_rm_code(child, product: DaneaProduct):
     product.rm_code = parse_code(product.name)
     if product.rm_code is None:
         product.name = product.name + "(ERROR: RMCODE)"
-    product.original_color = child.find('Variants').find('Variant').find(
-        'Color').text
 
 
 def parse_code(product_name: str):
@@ -239,7 +248,7 @@ def process_order(order: Order):
     document.find('CustomerCity').text = order.shipping_address.city
     document.find('CustomerProvince').text = order.shipping_address.country_area
     document.find('CustomerCountry').text = order.shipping_address.country.__str__()
-    document.find('PaymentName').text = 'PayPal'
+    document.find('PaymentName').text = extract_payment_method(order.get_last_payment().gateway.__str__())
     document.find('DocumentType').text = 'C'
     document.find(
         'Warehouse').text = '02 PRINCIPALE'  # TODO implemenort warehouse search
@@ -250,7 +259,6 @@ def process_order(order: Order):
     document.find('SalesAgent').text = 'e-commerce'
     document.find('CostDescription').text = 'Spese di Spedizione'
     document.find('CostAmount').text = order.shipping_price.gross.amount.__str__()
-    # TODO Figure out a way to calculate discounts based on each single product
     rows = []
     for order_line in order.lines.all():
         row = create_row()
@@ -280,16 +288,27 @@ def process_order(order: Order):
         rows.append(row)
     document.find('Rows').extend(rows)
     payments = []
-    for payment in order.payments.all():
-        pay = create_payment()
-        pay.find('Advance').text = 'false'
-        pay.find('Date').text = payment.created.strftime("%Y-%m-%d")
+    pay = create_payment()
+    payment: Payment = order.get_last_payment()
+    pay.find('Advance').text = 'false'
+    pay.find('Date').text = payment.created.strftime("%Y-%m-%d")
+    if payment.charge_status.__str__() == 'fully-charged':
         pay.find('Amount').text = payment.get_captured_amount().amount.__str__()
         pay.find('Paid').text = 'true'
+    if payment.charge_status.__str__() == 'not-charged':
+        pay.find('Paid').text = 'false'
+        pay.find('Amount').text = payment.get_authorized_amount().amount.__str__()
+    payments.append(pay)
     document.find('Payments').extend(payments)
 
     return document
 
+
+def extract_payment_method(gateway):
+    if gateway == 'todajoia.payments.OnDeliveryPayment':
+        return 'Contrassegno'
+    if gateway == 'mirumee.payments.braintree':
+        return 'Braintree'
 
 def generate_file():
     element = XmlParser.Element(

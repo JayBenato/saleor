@@ -66,7 +66,7 @@ class DaneaPlugin(BasePlugin):
         }
         return defaults
 
-    def order_fully_paid(self, order: "Order", previous_value: Any) -> Any:
+    def order_created(self, order: "Order", previous_value: Any):
         DaneaOrder.objects.create(
             saleor_order_id=order.id
         )

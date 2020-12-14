@@ -1,5 +1,4 @@
 import datetime
-from prices import Money
 from django.db import transaction
 from saleor.plugins.danea.danea_dataclass import DaneaProduct, DaneaVariant
 from saleor.warehouse.models import Warehouse, Stock
@@ -11,21 +10,27 @@ from saleor.product.models import Product, ProductVariant, Attribute, ProductTyp
 def update_product(product: DaneaProduct, warehouse: str):
     warehouse = find_warehouse(warehouse)
     django_product: Product = Product.objects.get(slug=product.code)
-    django_product.price = Money(product.gross_price, "EUR")
-    django_product.name = product.name + ' (' + product.rm_code + ')'
+    django_product.name = product.name + ' (' + product.rm_code + ')' + ' - ' + product.original_color
     django_product.description = product.rm_code
     django_product.updated_at = datetime.date.today()
+    django_product.is_published = True
+    django_product.visible_in_listings = True
+    django_product.category = Category.objects.get(slug=product.category.lower())
     django_product.save()
+    insert_product_into_collection(django_product, product.collection)
     for variant in product.variants:
         with transaction.atomic():
             try:
                 var = ProductVariant.objects.get(sku=variant.barcode)
+                var.price_amount = product.gross_price
             except:
                 var = ProductVariant.objects.create(
                     product=django_product,
                     sku=variant.barcode,
-                    name=variant.size
+                    name=variant.size,
+                    price_amount=product.gross_price
                 )
+
             try:
                 stock = Stock.objects.get(
                     product_variant_id=var.id,
@@ -71,13 +76,12 @@ def store_private_meta(persisted_product, product):
     persisted_product.save()
 
 
-
 def generate_product(product: DaneaProduct, warehouse: str):
     warehouse = find_warehouse(warehouse)
     product_type = ProductType.objects.get(slug=product.type.lower())
     category = Category.objects.get(slug=product.category.lower())
     persisted_product = Product.objects.create(
-        name=product.name + ' (' + product.rm_code + ')',
+        name=product.name + ' (' + product.rm_code + ')' + ' - ' + product.original_color,
         slug=product.code,
         category=category,
         product_type=product_type,
