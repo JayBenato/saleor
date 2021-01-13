@@ -184,10 +184,12 @@ msgid ""
 "You're receiving this e-mail because you or someone else has changed email for your user account at %(site_name)s.\n"
 "If you didn't request this change, please contact the administrator.\n"
 msgstr ""
+"\n"
+"\n"
 "Hai ricevuto questa e-mail perché tu o qualcun altro avete richiesto "
 "uneliminazione del tuo account utente su %(site_name)s. <br/> Clicca sul "
 "link sottostante per cancellare il tuo account. Tieni presente che questa "
-"azione è permanente."
+"azione è permanente.\n"
 
 #: templates/templated_email/account/password_reset.email:4
 msgctxt "Password reset e-mail subject"
@@ -203,8 +205,8 @@ msgid ""
 "It can be safely ignored if you did not request a password reset. Click the link below to reset your password.\n"
 msgstr ""
 "\n"
-"Hai ricevuto questa e-mail perché tu o qualcun altro avete richiesto una password per il tuo account utente in %(site_name)ns. \n"
-"Può essere tranquillamente ignorato se non hai richiesto la reimpostazione della password. Fai clic sul link sottostante per reimpostare la password. \n"
+"Hai ricevuto questa e-mail perché tu o qualcun altro avete richiesto una password per il tuo account utente in %(site_name)s. \n"
+"Può essere tranquillamente ignorato se non hai richiesto la reimpostazione della password. Fai clic sul link sottostante per reimpostare la password.\n"
 
 
 #: templates/templated_email/account/request_email_change.email:9
@@ -324,8 +326,10 @@ msgid ""
 "To see your payment details please visit:\n"
 "%(order_details_url)s\n"
 msgstr ""
+"\n"
 "Grazie per il vostro ordine. Di seguito è riportato l'elenco dei prodotti "
 "ordinati."
+"%(order_details_url)s\n"
 
 #: templates/templated_email/order/confirm_order.email:25
 #: templates/templated_email/order/staff_confirm_order.email:25
@@ -420,7 +424,7 @@ msgstr ""
 #, python-format
 msgctxt "Order refund e-mail subject"
 msgid "Order %(order)s refunded"
-msgstr "Ordine %(ordine)s rimborsato"
+msgstr "Ordine %(order)s rimborsato"
 
 #: templates/templated_email/order/order_refund.email:11
 #, python-format
