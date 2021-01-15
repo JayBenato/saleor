@@ -1,0 +1,501 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-01-14 20:45+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: saleor/account/templatetags/i18n_address_tags.py:12
+#, python-format
+msgctxt "Address data"
+msgid "%(first_name)s %(last_name)s"
+msgstr ""
+
+#: saleor/account/templatetags/i18n_address_tags.py:16
+#, python-format
+msgctxt "Address data"
+msgid ""
+"%(street_address_1)s\n"
+"%(street_address_2)s"
+msgstr ""
+
+#: saleor/plugins/danea/plugin.py:19
+msgctxt "Plugin help text"
+msgid "Provide user or account details"
+msgstr "Fornisci i dettagli dell'utente o dell'account"
+
+#: saleor/plugins/danea/plugin.py:21
+msgctxt "Plugin label"
+msgid "Username or account"
+msgstr "Nome utente o account"
+
+#: saleor/plugins/danea/plugin.py:26
+msgctxt "Plugin help text"
+msgid "Provide password or license details"
+msgstr "Fornisci password o dettagli della licenza"
+
+#: saleor/plugins/danea/plugin.py:28
+msgctxt "Plugin label"
+msgid "Password or license"
+msgstr "Password o licenza"
+
+#: templates/invoices/invoice.html:210
+msgctxt "Invoice PDF header"
+msgid "INVOICE INFORMATION"
+msgstr "INFORMAZIONI SULLA FATTURA"
+
+#: templates/invoices/invoice.html:213
+msgctxt "Invoice PDF header: Invoice number"
+msgid "Invoice number:"
+msgstr "Numero di fattura:"
+
+#: templates/invoices/invoice.html:219
+msgctxt "Invoice PDF header: order number"
+msgid "Order:"
+msgstr "Ordine:"
+
+
+#: templates/invoices/invoice.html:225
+msgctxt "Invoice PDF header"
+msgid "Date:"
+msgstr "Date:"
+
+#: templates/invoices/invoice.html:231
+msgctxt "Invoice PDF amount (price)"
+msgid "Amount:"
+msgstr "Quantità:"
+
+#: templates/invoices/invoice.html:240
+msgctxt "Invoice PDF"
+msgid "BILLING ADDRESS"
+msgstr "INDIRIZZO DI FATTURAZIONE"
+
+#: templates/invoices/invoice.html:269
+msgctxt "Invoice PDF"
+msgid "SHIPMENT ADDRESS"
+msgstr "INDIRIZZO DI SPEDIZIONE"
+
+#: templates/invoices/invoice.html:300
+msgctxt "Invoice PDF"
+msgid "PAYMENT METHOD"
+msgstr "METODO DI PAGAMENTO"
+
+#: templates/invoices/invoice.html:306
+msgctxt "Invoice PDF: Payment method value"
+msgid "Unpaid"
+msgstr "Non pagato"
+
+#: templates/invoices/invoice.html:314
+msgctxt "Invoice PDF"
+msgid "SHIPMENT METHOD"
+msgstr "METODO DI SPEDIZIONE"
+
+#: templates/invoices/invoice.html:324
+msgctxt "Invoice PDF table header"
+msgid "ITEMS ORDERED"
+msgstr "ARTICOLI ORDINATI"
+
+#: templates/invoices/invoice_products_table.html:7
+msgctxt "Invoice PDF table"
+msgid "Products"
+msgstr "Prodotti"
+
+#: templates/invoices/invoice_products_table.html:10
+msgctxt "Invoice PDF table"
+msgid "Price"
+msgstr "Prezzo"
+
+#: templates/invoices/invoice_products_table.html:13
+msgctxt "Invoice PDF table"
+msgid "Quantity"
+msgstr "Quantità"
+
+#: templates/invoices/invoice_products_table.html:16
+msgctxt "Invoice PDF table"
+msgid "Total Price"
+msgstr "Prezzo Totale"
+
+#: templates/invoices/invoice_summary_table.html:8
+msgctxt "Invoice PDF summary"
+msgid "Subtotal"
+msgstr "Totale parziale"
+
+#: templates/invoices/invoice_summary_table.html:21
+msgctxt "Invoice PDF summary"
+msgid "Delivery Cost"
+msgstr "Costi di Spedizione"
+
+#: templates/invoices/invoice_summary_table.html:34
+msgctxt "Invoice PDF summary"
+msgid "Tax"
+msgstr "Tasse"
+
+#: templates/invoices/invoice_summary_table.html:47
+msgctxt "Invoice PDF summary"
+msgid "Grand Total"
+msgstr "Somma Totale"
+
+#: templates/templated_email/compiled/account_delete.html:98
+#: templates/templated_email/compiled/confirm.html:98
+#: templates/templated_email/compiled/confirm_fulfillment.html:98
+#: templates/templated_email/compiled/confirm_order.html:99
+#: templates/templated_email/compiled/confirm_payment.html:98
+#: templates/templated_email/compiled/email_changed_notification.html:98
+#: templates/templated_email/compiled/export_failed.html:98
+#: templates/templated_email/compiled/export_products_file.html:98
+#: templates/templated_email/compiled/order_cancel.html:98
+#: templates/templated_email/compiled/order_refund.html:98
+#: templates/templated_email/compiled/password_reset.html:98
+#: templates/templated_email/compiled/request_email_change.html:98
+#: templates/templated_email/compiled/send_invoice.html:98
+#: templates/templated_email/compiled/set_customer_password.html:98
+#: templates/templated_email/compiled/set_password.html:98
+#: templates/templated_email/compiled/staff_confirm_order.html:99
+#: templates/templated_email/compiled/update_fulfillment.html:98
+msgctxt "Standard e-mail greeting"
+msgid "Hi!"
+msgstr "Ciao!"
+
+#: templates/templated_email/compiled/account_delete.html:107
+#, python-format
+msgctxt "Account delete e-mail text"
+msgid ""
+"You're receiving this e-mail because you or someone else has requested a "
+"deletion of your user account at %(site_name)s.<br> Click the link below to "
+"delete your account. Please note that this action is permanent and cannot be "
+"reversed."
+msgstr ""
+"Hai ricevuto questa e-mail perché tu o qualcun altro avete richiesto un"
+"eliminazione del tuo account utente in %(site_name)s. <br> Clicca sul collegamento sottostante per"
+"eliminare il tuo account. Tieni presente che questa azione è definitiva."
+
+#: templates/templated_email/compiled/account_delete.html:182
+#: templates/templated_email/compiled/confirm.html:182
+#: templates/templated_email/compiled/confirm_fulfillment.html:301
+#: templates/templated_email/compiled/confirm_order.html:400
+#: templates/templated_email/compiled/confirm_payment.html:172
+#: templates/templated_email/compiled/email_changed_notification.html:172
+#: templates/templated_email/compiled/export_failed.html:172
+#: templates/templated_email/compiled/export_products_file.html:171
+#: templates/templated_email/compiled/order_cancel.html:171
+#: templates/templated_email/compiled/order_refund.html:171
+#: templates/templated_email/compiled/password_reset.html:182
+#: templates/templated_email/compiled/request_email_change.html:182
+#: templates/templated_email/compiled/send_invoice.html:181
+#: templates/templated_email/compiled/set_customer_password.html:182
+#: templates/templated_email/compiled/set_password.html:182
+#: templates/templated_email/compiled/staff_confirm_order.html:392
+#: templates/templated_email/compiled/update_fulfillment.html:287
+msgctxt "Base email text"
+msgid "This is an automatically generated e-mail, please do not reply."
+msgstr "Questa è una e-mail generata automaticamente, per favore non rispondere."
+
+#: templates/templated_email/compiled/account_delete.html:246
+#: templates/templated_email/compiled/confirm.html:246
+#: templates/templated_email/compiled/confirm_fulfillment.html:365
+#: templates/templated_email/compiled/confirm_order.html:464
+#: templates/templated_email/compiled/confirm_payment.html:236
+#: templates/templated_email/compiled/email_changed_notification.html:236
+#: templates/templated_email/compiled/export_failed.html:236
+#: templates/templated_email/compiled/export_products_file.html:235
+#: templates/templated_email/compiled/order_cancel.html:235
+#: templates/templated_email/compiled/order_refund.html:235
+#: templates/templated_email/compiled/password_reset.html:246
+#: templates/templated_email/compiled/request_email_change.html:246
+#: templates/templated_email/compiled/send_invoice.html:245
+#: templates/templated_email/compiled/set_customer_password.html:246
+#: templates/templated_email/compiled/set_password.html:246
+#: templates/templated_email/compiled/staff_confirm_order.html:456
+#: templates/templated_email/compiled/update_fulfillment.html:351
+#, python-format
+msgctxt "Base email footer"
+msgid "Sincerely, %(site_name)s"
+msgstr "Cordiali saluti, %(site_name)s"
+
+#: templates/templated_email/compiled/confirm.html:107
+#, python-format
+msgctxt "Account confirmation e-mail text"
+msgid ""
+"In order to log into %(site_name)s, you have to confirm your email address "
+"first. Please click the link below to do so and log into your account."
+msgstr ""
+"Per accedere a %(site_name)s, devi confermare il tuo indirizzo email"
+"prima. Fai clic sul link sottostante per farlo e accedi al tuo account."
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:107
+msgctxt "Fulfillment confirmation email text"
+msgid "Thank you for your order. Below is the list of fulfilled products."
+msgstr "Grazie per il vostro ordine. Di seguito è riportato l'elenco dei prodotti evasi."
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:114
+#: templates/templated_email/compiled/update_fulfillment.html:114
+#, python-format
+msgctxt "Fulfillment confirmation email text"
+msgid ""
+"You can track your shipment with <a href=\"%(tracking_number)s\">"
+"%(tracking_number)s</a> link."
+msgstr ""
+"Puoi monitorare la tua spedizione con <a href=\"%(tracking_number)s\">"
+"%(tracking_number)s </a> link."
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:120
+#: templates/templated_email/compiled/update_fulfillment.html:120
+#, python-format
+msgctxt "Fulfillment confirmation email text"
+msgid "You can track your shipment with %(tracking_number)s code."
+msgstr "Puoi tracciare la tua spedizione con il codice %(tracking_number)s."
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:135
+msgctxt "Fulfillment digital products email text"
+msgid "You can download your digital products by clicking in download link(s)."
+msgstr "Puoi scaricare i tuoi prodotti digitali cliccando sul link per il download."
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:207
+#: templates/templated_email/compiled/confirm_fulfillment.html:225
+#: templates/templated_email/compiled/confirm_order.html:236
+#: templates/templated_email/compiled/staff_confirm_order.html:228
+#: templates/templated_email/compiled/update_fulfillment.html:193
+#: templates/templated_email/compiled/update_fulfillment.html:211
+msgctxt "Ordered item name"
+msgid "Item"
+msgstr "Articolo"
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:208
+#: templates/templated_email/compiled/confirm_order.html:237
+#: templates/templated_email/compiled/staff_confirm_order.html:229
+#: templates/templated_email/compiled/update_fulfillment.html:194
+msgctxt "Quantity ordered of a product"
+msgid "Quantity"
+msgstr "Quantità"
+
+#: templates/templated_email/compiled/confirm_fulfillment.html:226
+#: templates/templated_email/compiled/update_fulfillment.html:212
+msgctxt "Ordered item download links"
+msgid "Download Link"
+msgstr ""
+
+#: templates/templated_email/compiled/confirm_order.html:109
+#, python-format
+msgctxt "Order confirmation e-mail text with payment details"
+msgid ""
+"Thank you for your order. Below is the list of ordered products. To see your "
+"payment details please visit: <a href=\"%(order_details_url)s\">"
+"%(order_details_url)s</a>"
+msgstr ""
+"Grazie per il tuo ordine. Di seguito è riportato l'elenco dei prodotti ordinati. Per vedere i"
+"dettagli di pagamento, visita: <a href=\"%(order_details_url)s\">"
+"%(order_details_url)s</a>"
+
+#: templates/templated_email/compiled/confirm_order.html:115
+msgctxt "Order confirmation e-mail text"
+msgid "Thank you for your order. Below is the list of ordered products."
+msgstr "Grazie per il vostro ordine. Di seguito è riportato l'elenco dei prodotti ordinati."
+
+#: templates/templated_email/compiled/confirm_order.html:189
+#: templates/templated_email/compiled/staff_confirm_order.html:181
+msgctxt "E-mail order lines summary table"
+msgid "Subtotal"
+msgstr "Totale Parziale"
+
+#: templates/templated_email/compiled/confirm_order.html:197
+#: templates/templated_email/compiled/staff_confirm_order.html:189
+msgctxt "E-mail order lines summary table"
+msgid "Shipping"
+msgstr "Spedizione"
+
+#: templates/templated_email/compiled/confirm_order.html:206
+#: templates/templated_email/compiled/staff_confirm_order.html:198
+msgctxt "E-mail order lines summary table"
+msgid "Taxes (included)"
+msgstr "Tasse (incluse)"
+
+#: templates/templated_email/compiled/confirm_order.html:208
+#: templates/templated_email/compiled/staff_confirm_order.html:200
+msgctxt "E-mail order lines summary table"
+msgid "Taxes"
+msgstr "Tasse"
+
+#: templates/templated_email/compiled/confirm_order.html:218
+#: templates/templated_email/compiled/staff_confirm_order.html:210
+msgctxt "E-mail order lines summary table"
+msgid "Discount"
+msgstr "Sconto"
+
+#: templates/templated_email/compiled/confirm_order.html:227
+#: templates/templated_email/compiled/staff_confirm_order.html:219
+msgctxt "E-mail order lines summary table"
+msgid "Total"
+msgstr "Totale"
+
+#: templates/templated_email/compiled/confirm_order.html:238
+#: templates/templated_email/compiled/staff_confirm_order.html:230
+msgctxt "Unit price of a product"
+msgid "Per unit"
+msgstr "Per unità"
+
+#: templates/templated_email/compiled/confirm_order.html:239
+#: templates/templated_email/compiled/staff_confirm_order.html:231
+msgctxt "Ordered item subtotal (unit price * quantity)"
+msgid "Subtotal"
+msgstr "Totale Parziale"
+
+#: templates/templated_email/compiled/confirm_order.html:317
+#: templates/templated_email/compiled/staff_confirm_order.html:309
+msgctxt "Order confirmation e-mail billing address"
+msgid "Billing address"
+msgstr "Indirizzo di fatturazione"
+
+#: templates/templated_email/compiled/confirm_order.html:318
+#: templates/templated_email/compiled/staff_confirm_order.html:310
+msgctxt "Order confirmation e-mail shipping address"
+msgid "Shipping address"
+msgstr "Indirizzo di spedizione"
+
+#: templates/templated_email/compiled/confirm_order.html:327
+#: templates/templated_email/compiled/staff_confirm_order.html:319
+msgctxt "Order confirmation e-mail text"
+msgid "No billing address"
+msgstr "Nessun indirizzo di fatturazione"
+
+#: templates/templated_email/compiled/confirm_order.html:334
+#: templates/templated_email/compiled/staff_confirm_order.html:326
+msgctxt "Order confirmation e-mail text"
+msgid "No shipping required"
+msgstr "Nessuna spedizione richiesta"
+
+#: templates/templated_email/compiled/confirm_payment.html:107
+msgctxt "Payment confirmation e-mail text"
+msgid "Thank you for your payment. Your payment was successfully processed."
+msgstr "Il pagamento è stato elaborato correttamente, Grazie."
+
+#: templates/templated_email/compiled/email_changed_notification.html:107
+#, python-format
+msgctxt "Email change e-mail text"
+msgid ""
+"You're receiving this e-mail because you or someone else has changed email "
+"for your user account at %(site_name)s.<br> If you didn't request this "
+"change, please contact the administrator."
+msgstr ""
+"Hai ricevuto questa e-mail perché avete cambiato indirizzo"
+"per il tuo account utente su %(site_name)s.<br> Se non l'hai richiesto"
+"modifica, contatta l'amministratore."
+
+#: templates/templated_email/compiled/export_failed.html:107
+msgctxt "Export products e-mail text"
+msgid ""
+"Sorry, we couldn't finish exporting products, some unexpected errors "
+"occurred. Please try again."
+msgstr ""
+"Spiacenti, non è stato possibile completare l'esportazione dei prodotti, alcuni errori imprevisti"
+"si sono verificati. Riprova."
+
+#: templates/templated_email/compiled/export_products_file.html:107
+#, python-format
+msgctxt "Export products e-mail text"
+msgid ""
+"Your file with products data is ready to download: <a href=\"%(csv_link)s\">"
+"%(csv_link)s</a>"
+msgstr ""
+"Il tuo file con i dati dei prodotti è pronto per il download: <a href=\"%(csv_link)s\">"
+"%(csv_link)s</a>"
+
+#: templates/templated_email/compiled/order_cancel.html:107
+msgctxt "Order cancel e-mail text"
+msgid "Your order has been canceled."
+msgstr "Il tuo ordine è stato annullato."
+
+#: templates/templated_email/compiled/order_refund.html:107
+#, python-format
+msgctxt "Order refund e-mail text"
+msgid "A payment of %(amount)s %(currency)s has been refunded for your order."
+msgstr "Un pagamento di %(amount)s %(currency)s è stato rimborsato per il tuo ordine."
+
+#: templates/templated_email/compiled/password_reset.html:107
+#, python-format
+msgctxt "Password reset e-mail text"
+msgid ""
+"You're receiving this e-mail because you or someone else has requested a "
+"password for your user account at %(site_name)s.<br> It can be safely "
+"ignored if you did not request a password reset. Click the link below to "
+"reset your password."
+msgstr ""
+"Hai ricevuto questa e-mail perché avete richiesto il cambio della"
+"password per il vostro account su %(site_name)s.<br>Ignora la presente email"
+"se non hai richiesto la reimpostazione della password. Clicca sul link sottostante per"
+"reimpostare la tua password."
+
+#: templates/templated_email/compiled/request_email_change.html:107
+#, python-format
+msgctxt "Email change e-mail text"
+msgid ""
+"You're receiving this e-mail because you or someone else has requested an "
+"email change for your user account at %(site_name)s.<br> It can be safely "
+"ignored if you did not request an email change. Click the link below to "
+"confirm new email address."
+msgstr ""
+"Hai ricevuto questa e-mail perché tu o qualcun altro avete richiesto un"
+"modifica dell'email per il tuo account utente in %(site_name)s. <br> Può essere sicuro"
+"ignorato se non hai richiesto una modifica dell'email. Fai clic sul link sottostante per"
+"conferma nuovo indirizzo email."
+
+#: templates/templated_email/compiled/send_invoice.html:107
+#, python-format
+msgctxt "Send invoice e-mail text"
+msgid "In order to download invoice %(number)s, click the link below."
+msgstr "Per scaricare la fattura %(number)s, Clicca sul collegamento sottostante."
+
+#: templates/templated_email/compiled/set_customer_password.html:107
+#, python-format
+msgctxt "Set password for customer e-mail text"
+msgid ""
+"You're receiving this e-mail because you have to set password for your "
+"customer account at %(site_name)s.<br> Click the link below to set up your "
+"password."
+msgstr ""
+"Hai ricevuto questa e-mail perché devi impostare la password per il tuo"
+"account cliente su %(site_name)s. <br> Clicca sul link  per configurare la tua"
+"password."
+
+#: templates/templated_email/compiled/set_password.html:107
+#, python-format
+msgctxt "Set password for staff member e-mail text"
+msgid ""
+"You're receiving this e-mail because you have to set password for your staff "
+"member account at %(site_name)s.<br> Click the link below to set up your "
+"password."
+msgstr ""
+"Hai ricevuto questa e-mail perché devi impostare la password per il tuo staff"
+"account membro in %(site_name)s.<br> CLicca sul link sottostante per configurare la tua"
+"password."
+
+#: templates/templated_email/compiled/staff_confirm_order.html:108
+#, python-format
+msgctxt "Order confirmation staff e-mail text"
+msgid ""
+"Someone placed a new order in your store. To see order details please visit: "
+"<a href=\"%(order_details_url)s\">%(order_details_url)s</a>"
+msgstr ""
+"Qualcuno ha effettuato un nuovo ordine nel tuo negozio. Per visualizzare i dettagli dell'ordine, visita:"
+"<a href=\"%(order_details_url)s\">%(order_details_url)s</a>"
+
+#: templates/templated_email/compiled/update_fulfillment.html:107
+msgctxt "Fulfillment update email text"
+msgid ""
+"Your shipping status has been updated. Below is the list of ordered products "
+"that have been updated with new tracking number."
+msgstr ""
+"Lo stato della spedizione è stato aggiornato. Di seguito è riportato l'elenco dei prodotti ordinati"
+"che sono stati aggiornati con un nuovo numero di riferimento."
