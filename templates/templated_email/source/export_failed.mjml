@@ -13,10 +13,12 @@
           {% trans "Hi!" context "Standard e-mail greeting" %}
         </mj-text>
         <mj-text>
+        {% autoescape on %}
         {% blocktrans trimmed context "Export products e-mail text" %}
             Sorry, we couldn't finish exporting products, some unexpected errors occurred.
             Please try again.
         {% endblocktrans %}
+        {% endautoescape %}
         </mj-text>
       </mj-column>
     </mj-section>

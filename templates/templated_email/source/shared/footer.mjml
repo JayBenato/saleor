@@ -1,18 +1,22 @@
 <mj-section>
   <mj-column>
     <mj-text>
+      {% autoescape on %}
       {% blocktrans trimmed context "Base email text" %}
         This is an automatically generated e-mail, please do not reply.
       {% endblocktrans %}
+      {% endautoescape %}
     </mj-text>
   </mj-column>
 </mj-section>
 <mj-section background-color="#F2F2F2">
   <mj-column>
     <mj-text align="center">
+      {% autoescape on %}
       {% blocktrans trimmed context "Base email footer" %}
         Sincerely, {{ site_name }}
       {% endblocktrans %}
+      {% endautoescape %}
     </mj-text>
   </mj-column>
 </mj-section>

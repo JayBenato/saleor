@@ -1,7 +1,8 @@
 import dataclasses
+import decimal
 import logging
 import xml.etree.ElementTree as XmlParser
-from saleor.product.models import Product, ProductVariant, AttributeValue, Collection
+from saleor.product.models import Product, ProductVariant, AttributeValue
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task, \
     update_available_products_task
@@ -76,28 +77,28 @@ def parse_size(size: str):
 def extract_private_metadata(child, product):
     product.code = child.find('Code').text
     product.internal_id = child.find('InternalID').text
-    product.gross_price = child.find('GrossPrice1').text
-    product.net_price = child.find('NetPrice1').text
+    product.gross_price = decimal.Decimal(child.find('GrossPrice1').text)
+    product.net_price = decimal.Decimal(child.find('NetPrice1').text)
     try:
-        product.sale_price = child.find('GrossPrice2').text
+        product.sale_price = decimal.Decimal(child.find('GrossPrice2').text)
     except:
-        product.sale_price = 0
+        product.sale_price = decimal.Decimal(0)
     try:
-        product.r120_price = child.find('GrossPrice3').text
+        product.r120_price = decimal.Decimal(child.find('GrossPrice3').text)
     except:
-        product.r120_price = 0
+        product.r120_price = decimal.Decimal(0)
     try:
-        product.r110_price = child.find('GrossPrice4').text
+        product.r110_price = decimal.Decimal(child.find('GrossPrice4').text)
     except:
-        product.r110_price = 0
+        product.r110_price = decimal.Decimal(0)
     try:
-        product.r100_price = child.find('GrossPrice5').text
+        product.r100_price = decimal.Decimal(child.find('GrossPrice5').text)
     except:
-        product.r100_price = 0
+        product.r100_price = decimal.Decimal(0)
     try:
-        product.web_price = child.find('GrossPrice6').text
+        product.web_price = decimal.Decimal(child.find('GrossPrice6').text)
     except:
-        product.web_price = 0
+        product.web_price = decimal.Decimal(0)
 
 
 def check_for_errors(product: DaneaProduct) -> bool:
@@ -134,12 +135,7 @@ def extract_material(child, product):
 
 
 def extract_collection(child, product):
-    try:
-        product.collection = child.find('WarehouseLocation').text.lower()
-        if not Collection.objects.filter(slug=product.collection).exists():
-            product.collection = parse_collection(product.name)
-    except:
-        product.collection = 'N'
+    product.collection = parse_collection(product.name)
 
 
 def parse_collection(product_name: str):

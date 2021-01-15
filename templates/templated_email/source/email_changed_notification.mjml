@@ -13,10 +13,12 @@
           {% trans "Hi!" context "Standard e-mail greeting" %}
         </mj-text>
         <mj-text>
+          {% autoescape on %}
           {% blocktrans trimmed context "Email change e-mail text" %}
           You're receiving this e-mail because you or someone else has changed email for your user account at {{ site_name }}.<br />
           If you didn't request this change, please contact the administrator.
           {% endblocktrans %}
+          {% endautoescape %}
         </mj-text>
       </mj-column>
     </mj-section>

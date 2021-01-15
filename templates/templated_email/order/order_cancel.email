@@ -1,16 +1,20 @@
 {% load i18n %}
 
 {% block subject %}
+  {% autoescape on %}
   {% blocktrans trimmed context "Order cancel e-mail subject" %}
     Order {{ order }} canceled
   {% endblocktrans %}
+  {% endautoescape %}
 {% endblock %}
 
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
+{% autoescape on %}
 {% blocktrans context "Order cancel e-mail text" %}
 Your order has been canceled.
 {% endblocktrans %}
+{% endautoescape %}
 
 {% include 'templated_email/shared/_footer.email' %}
 {% endblock %}

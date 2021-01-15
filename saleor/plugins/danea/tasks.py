@@ -1,3 +1,4 @@
+import decimal
 import json
 
 from .danea_dataclass import DaneaProduct, DaneaVariant
@@ -29,6 +30,7 @@ def update_available_products_task(product_slugs):
         if active_product is False:
             product.is_published = False
             product.visible_in_listings = False
+            product.available_for_purchase = None
             product.save()
 
 
@@ -43,13 +45,13 @@ def to_danea_product(dictionary) -> DaneaProduct:
     product.rm_code = dictionary.get('rm_code')
     product.collection = dictionary.get('collection')
     product.internal_id = dictionary.get('internal_id')
-    product.net_price = dictionary.get('net_price')
-    product.gross_price = dictionary.get('gross_price')
-    product.sale_price = dictionary.get('sale_price')
-    product.r120_price = dictionary.get('r120_price')
-    product.r110_price = dictionary.get('r110_price')
-    product.r100_price = dictionary.get('r100_price')
-    product.web_price = dictionary.get('web_price')
+    product.net_price = decimal.Decimal(dictionary.get('net_price'))
+    product.gross_price = decimal.Decimal(dictionary.get('gross_price'))
+    product.sale_price = decimal.Decimal(dictionary.get('sale_price'))
+    product.r120_price = decimal.Decimal(dictionary.get('r120_price'))
+    product.r110_price = decimal.Decimal(dictionary.get('r110_price'))
+    product.r100_price = decimal.Decimal(dictionary.get('r100_price'))
+    product.web_price = decimal.Decimal(dictionary.get('web_price'))
     product.rm_collection = dictionary.get('rm_collection')
     product.color = dictionary.get('color')
     product.category = dictionary.get('category')

@@ -1,7 +1,11 @@
 {% load i18n %}
+{% autoescape on %}
 {% blocktrans trimmed context "Base email text" %}
 This is an automatically generated e-mail, please do not reply.
 {% endblocktrans %}
+{% endautoescape %}
+{% autoescape on %}
 {% blocktrans trimmed context "Base email footer" %}
 Sincerely, {{ site_name }}
 {% endblocktrans %}
+{% endautoescape %}

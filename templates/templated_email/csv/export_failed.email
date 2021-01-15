@@ -7,10 +7,12 @@
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
 
+{% autoescape on %}
 {% blocktrans trimmed context "Export products e-mail text" %}
 Sorry, we cannot finish product export, some unexpected errors occurred.
 Please try again.
 {% endblocktrans %}
+{% endautoescape %}
 
 {% include 'templated_email/shared/_footer.email' %}
 {% endblock %}

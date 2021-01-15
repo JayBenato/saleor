@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-
-from saleor.graphql.core.scalars import Decimal
+from decimal import Decimal
 
 
 @dataclass(init=False, repr=True)

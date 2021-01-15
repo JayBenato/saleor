@@ -7,9 +7,11 @@
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
 
+{% autoescape on %}
 {% blocktrans trimmed context "Export products e-mail text" %}
 Your file with products data is ready to download: {{ csv_link }}
 {% endblocktrans %}
+{% endautoescape %}
 
 {% include 'templated_email/shared/_footer.email' %}
 {% endblock %}

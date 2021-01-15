@@ -20,10 +20,17 @@ class PluginConfiguration(models.Model):
     def __str__(self):
         return f"Configuration of {self.name}, active: {self.active}"
 
+
 class DaneaOrder(models.Model):
     saleor_order_id = models.CharField(max_length=250)
+
 
 class DaneaCategoryMappings(models.Model):
     danea_field = models.CharField(max_length=250)
     saleor_category_slug = models.CharField(max_length=250)
     saleor_type_slug = models.CharField(max_length=250)
+
+
+class DaneaCollections(models.Model):
+    season = models.CharField(max_length=250)
+    year = models.IntegerField()

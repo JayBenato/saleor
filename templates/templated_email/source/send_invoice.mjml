@@ -13,9 +13,11 @@
           {% trans "Hi!" context "Standard e-mail greeting" %}
         </mj-text>
         <mj-text>
+          {% autoescape on %}
           {% blocktrans trimmed context "Send invoice e-mail text" %}
             In order to download invoice {{ number }}, click the link below.
           {% endblocktrans %}
+          {% endautoescape %}
         </mj-text>
         <mj-text>
           <a href="{{ download_url | safe }}">

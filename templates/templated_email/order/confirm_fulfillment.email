@@ -1,20 +1,26 @@
 {% load i18n %}
 
 {% block subject %}
+  {% autoescape on %}
   {% blocktrans trimmed with order=fulfillment.order context "Fulfillment confirmation email subject" %}
     Your order {{ order }} has been fulfilled
   {% endblocktrans %}
+  {% endautoescape %}
 {% endblock %}
 
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
+{% autoescape on %}
 {% blocktrans context "Fulfillment confirmation email text" %}
 Thank you for your order. Below is the list of fulfilled products.
 {% endblocktrans %}
+{% endautoescape %}
 {% if fulfillment.tracking_number %}
+{% autoescape on %}
 {% blocktrans trimmed with tracking_number=fulfillment.tracking_number context "Fulfillment confirmation email text" %}
 You can track your shipment with {{ tracking_number }} code.
 {% endblocktrans %}
+{% endautoescape %}
 {% endif %}
 
 {% for line in physical_lines %}

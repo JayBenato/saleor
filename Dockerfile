@@ -46,3 +46,4 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED 1
 
 CMD ["gunicorn", "--bind", ":8000", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "saleor.asgi:application"]
+#CMD ["gunicorn","--keyfile","todajoia.key","--certfile","certificate.cer","--ca-certs","ca-certificate.cer", "--bind", ":443", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "saleor.asgi:application"]

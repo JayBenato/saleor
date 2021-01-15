@@ -1,17 +1,21 @@
 {% load i18n %}
 
 {% block subject %}
+{% autoescape on %}
   {% blocktrans trimmed context "Payment confirmation subject" %}
     Order {{ order }} payment details
   {% endblocktrans %}
+{% endautoescape %}
 {% endblock %}
 
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
+{% autoescape on %}
 {% blocktrans context "Payment confirmation email text" %}
 Thank you for your payment.
 Your payment was successfully processed.
 {% endblocktrans %}
+{% endautoescape %}
 {% include 'templated_email/shared/_footer.email' %}
 {% endblock %}
 

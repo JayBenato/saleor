@@ -6,9 +6,11 @@
 
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
+{% autoescape on %}
 {% blocktrans context "Send invoice e-mail text" %}
 In order to download invoice {{ number }}, click the link below.
 {% endblocktrans %}
+{% endautoescape %}
 
 {{ download_url | safe }}
 
