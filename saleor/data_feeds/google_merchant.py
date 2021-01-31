@@ -14,7 +14,8 @@ from ..core.taxes import charge_taxes_on_shipping
 from ..discount import DiscountInfo
 from ..discount.utils import fetch_discounts
 from ..plugins.manager import get_plugins_manager
-from ..product.models import Attribute, AttributeValue, Category, ProductVariant
+from ..product.models import Attribute, AttributeValue, Category, ProductVariant, \
+    Product
 from ..warehouse.availability import is_variant_in_stock
 
 CATEGORY_SEPARATOR = " > "
@@ -40,6 +41,7 @@ ATTRIBUTES = [
     "color",
     "size",
     "description",
+    "link",
 ]
 
 
@@ -151,6 +153,15 @@ def item_image_link(item: ProductVariant, current_site):
     return None
 
 
+def item_link(item: ProductVariant, current_site):
+    product_url = item.product.name.replace("-", "")
+    product_url = product_url.replace(")", "")
+    product_url = product_url.replace("(", "")
+    product_url = product_url.replace(" ", "-")
+    product_url = "/products/" + product_url + "/" + str(item.product.id) + "/"
+    return add_domain(current_site.domain, product_url, True)
+
+
 def item_availability(item: ProductVariant):
     if is_variant_in_stock(item, settings.DEFAULT_COUNTRY):
         return "in stock"
@@ -187,14 +198,14 @@ def item_sale_price(item: ProductVariant, discounts: Iterable[DiscountInfo]):
 
 
 def item_attributes(
-    item: ProductVariant,
-    categories,
-    category_paths,
-    current_site,
-    discounts: Iterable[DiscountInfo],
-    attributes_dict,
-    attribute_values_dict,
-    is_charge_taxes_on_shipping: bool,
+        item: ProductVariant,
+        categories,
+        category_paths,
+        current_site,
+        discounts: Iterable[DiscountInfo],
+        attributes_dict,
+        attribute_values_dict,
+        is_charge_taxes_on_shipping: bool,
 ):
     product_data = {
         "id": item_id(item),
@@ -205,6 +216,7 @@ def item_attributes(
         "item_group_id": item_group_id(item),
         "availability": item_availability(item),
         "google_product_category": item_google_product_category(item, category_paths),
+        "link": item_link(item, current_site)
     }
 
     image_link = item_image_link(item, current_site)
