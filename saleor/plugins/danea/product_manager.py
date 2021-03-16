@@ -3,7 +3,6 @@ import datetime
 from django.db import transaction
 from saleor.discount.models import Sale
 from saleor.plugins.danea.danea_dataclass import DaneaProduct, DaneaVariant
-from saleor.plugins.models import DaneaCollections
 from saleor.warehouse.models import Warehouse, Stock
 from saleor.product.utils.attributes import associate_attribute_values_to_instance
 from saleor.product.models import Product, ProductVariant, Attribute, ProductType, \
@@ -34,7 +33,7 @@ def update_product(product: DaneaProduct, warehouse: str):
                     name=variant.size,
                     price_amount=product.gross_price
                 )
-
+                find_and_associate_size(var, variant)
             try:
                 stock = Stock.objects.get(
                     product_variant_id=var.id,
@@ -51,7 +50,7 @@ def update_product(product: DaneaProduct, warehouse: str):
                 stock.quantity = 0
             stock.save()
             store_variant_private_meta(var, variant)
-
+        find_and_associate_size(var, variant)
 
 def store_variant_private_meta(var: ProductVariant, variant: DaneaVariant):
     private_meta = {

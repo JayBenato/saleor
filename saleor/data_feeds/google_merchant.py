@@ -1,5 +1,6 @@
 import csv
 import gzip
+import math
 from typing import Iterable
 
 from django.conf import settings
@@ -121,9 +122,9 @@ def item_brand(item: ProductVariant, attributes_dict, attribute_values_dict):
 
 
 def item_tax(
-    item: ProductVariant,
-    discounts: Iterable[DiscountInfo],
-    is_charge_taxes_on_shipping: bool,
+        item: ProductVariant,
+        discounts: Iterable[DiscountInfo],
+        is_charge_taxes_on_shipping: bool,
 ):
     """Return item tax.
 
@@ -157,8 +158,9 @@ def item_link(item: ProductVariant, current_site):
     product_url = item.product.name.replace("-", "")
     product_url = product_url.replace(")", "")
     product_url = product_url.replace("(", "")
+    product_url = product_url.replace("  ", " ")
     product_url = product_url.replace(" ", "-")
-    product_url = "/products/" + product_url + "/" + str(item.product.id) + "/"
+    product_url = "/product/" + product_url + "/" + str(item.product.id) + "/"
     return add_domain(current_site.domain, product_url, True)
 
 
@@ -189,12 +191,12 @@ def item_google_product_category(item: ProductVariant, category_paths):
 
 def item_price(item: ProductVariant):
     price = item.get_price(discounts=None)
-    return "%s %s" % (price.amount, price.currency)
+    return "%s %s" % (math.trunc(price.amount), price.currency)
 
 
 def item_sale_price(item: ProductVariant, discounts: Iterable[DiscountInfo]):
     sale_price = item.get_price(discounts=discounts)
-    return "%s %s" % (sale_price.amount, sale_price.currency)
+    return "%s %s" % (math.trunc(sale_price.amount), sale_price.currency)
 
 
 def item_attributes(

@@ -6,13 +6,11 @@
 
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
-{% autoescape on %}
 {% blocktrans context "Email change e-mail text" %}
 
 You're receiving this e-mail because you or someone else has changed email for your user account at {{ site_name }}.
 If you didn't request this change, please contact the administrator.
 {% endblocktrans %}
-{% endautoescape %}
 
 {% include 'templated_email/shared/_footer.email' %}
 {% endblock %}

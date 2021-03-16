@@ -6,12 +6,10 @@
 
 {% block plain %}
 {% include 'templated_email/shared/_header.email' %}
-{% autoescape on %}
 {% blocktrans context "Account confirmation e-mail text" %}
 In order to log into {{ site_name }}, you have to confirm your email address first.
 Please click the link below to do so and log into your account.
 {% endblocktrans %}
-{% endautoescape %}
 
 {{ confirm_url | safe }}
 

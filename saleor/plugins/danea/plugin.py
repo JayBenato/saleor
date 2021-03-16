@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class DaneaPlugin(BasePlugin):
     PLUGIN_NAME = "DaneaPlugin"
-    PLUGIN_ID = "danea.integration"
+    PLUGIN_ID = "todajoia.integration.danea"
     CONFIG_STRUCTURE = {
         "Username or account": {
             "type": ConfigurationTypeField.STRING,
