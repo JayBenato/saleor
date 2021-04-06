@@ -1,14 +1,18 @@
 import logging
-from typing import Any
-
+from datetime import timezone
+from typing import Any, List
+from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
+from django.utils.encoding import smart_text
 from django.utils.translation import pgettext_lazy
-import mailchimp_marketing as  MailchimpMarketing
+import mailchimp_marketing as MailchimpMarketing
 from mailchimp_marketing.api_client import ApiClientError
-
+from saleor.core.taxes import charge_taxes_on_shipping
+from saleor.discount.utils import fetch_discounts
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
+from saleor.plugins.mailchimp import utils
 from saleor.plugins.models import PluginConfiguration
-from saleor.product.models import Product
+from saleor.product.models import Product, Attribute, Category, AttributeValue
 
 logger = logging.getLogger(__name__)
 
@@ -40,16 +44,16 @@ class MailChimpPlugin(BasePlugin):
         }
     }
     client = MailchimpMarketing.Client()
+    config = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Convert to dict to easier take config elements
-        configuration = {item["name"]: item["value"] for item in self.configuration}
+        self.config = {item["name"]: item["value"] for item in self.configuration}
         self.client.set_config({
-            "api_key": configuration["API Key"],
-            "server": configuration["Server Prefix"]
+            "api_key": self.config["API Key"],
+            "server": self.config["Server Prefix"]
         })
-        self._cached_taxes = {}
 
     @classmethod
     def validate_plugin_configuration(cls, plugin_configuration: "PluginConfiguration"):
@@ -88,31 +92,22 @@ class MailChimpPlugin(BasePlugin):
         }
         return defaults
 
-    def mailchimp_product_created(self, product: "Product", previous_value: Any) -> Any:
+    def product_updated(self, product: "Product", previous_value: Any) -> Any:
+        # TODO make this a celery task
+        return super().product_updated(product, previous_value)
 
-
-    @staticmethod
-    def mailchimp_get_product_variants_array(product: "Product") -> []:
-        variants = []
-        for variant in product.variants:
-            variants.append(
-                {"id": variant.id, "title": variant.name}
-            )
-
-    def mailchimp_update_product(self,mailchimp_product,configurations):
-        saleor_product : Product = Product.objects.get(mailchimp_product.id)
-        response = client.ecommerce.update_store_product(configurations["Store ID"], , {})
-
-
-    def mailchimp_create_product(self, product:Product,configuration):
-        # Convert to dict to easier take config elements
-        configuration = {item["name"]: item["value"] for item in self.configuration}
+    def product_created(self, product: "Product", previous_value: Any) -> Any:
+        # TODO make this a celery task
         try:
             response = self.client.ecommerce.add_store_product(
-                configuration["Store ID"],
+                self.config["Store ID"],
                 {
                     "id": product.id,
+                    "url": self.mailchimp_get_product_url(product),
                     "title": product.name,
+                    "type": product.product_type.name,
+                    "image_url": "",
+                    "images": self.mailchimp_get_product_images_url(product),
                     "variants": self.mailchimp_get_product_variants_array(product)
                 }
             )
@@ -120,14 +115,23 @@ class MailChimpPlugin(BasePlugin):
         except ApiClientError as error:
             print("Error: {}".format(error.text))
 
-    def mailchimp_sync_products(self, products):
-        configuration = {item["name"]: item["value"] for item in self.configuration}
-        try:
-            response = self.client.ecommerce.get_all_store_products(configuration["Store ID"])
-            for saleor_product in Product.objects.all():
+        return super().product_created(product, previous_value)
 
-                    mailchimp_update_product(mailchimp_product,configuration)
-                else:
-                    mailchimp_create_product(mailchimp_product)
-        except ApiClientError as error:
-            print("Error: {}".format(error.text))
+    def order_created(self, order: "Order", previous_value: Any):
+        return super().order_created(order, previous_value)
+
+    def order_fully_paid(self, order: "Order", previous_value: Any) -> Any:
+        return super().order_fully_paid(order, previous_value)
+
+    def order_updated(self, order: "Order", previous_value: Any) -> Any:
+        return super().order_updated(order, previous_value)
+
+    def preprocess_order_creation(self, checkout: "Checkout",
+                                  discounts: List["DiscountInfo"], previous_value: Any):
+        return super().preprocess_order_creation(checkout, discounts, previous_value)
+
+    def order_cancelled(self, order: "Order", previous_value: Any) -> Any:
+        return super().order_cancelled(order, previous_value)
+
+    def order_fulfilled(self, order: "Order", previous_value: Any) -> Any:
+        return super().order_fulfilled(order, previous_value)

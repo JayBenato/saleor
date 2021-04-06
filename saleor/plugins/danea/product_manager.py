@@ -3,6 +3,7 @@ import datetime
 from django.db import transaction
 from saleor.discount.models import Sale
 from saleor.plugins.danea.danea_dataclass import DaneaProduct, DaneaVariant
+from saleor.plugins.manager import get_plugins_manager
 from saleor.warehouse.models import Warehouse, Stock
 from saleor.product.utils.attributes import associate_attribute_values_to_instance
 from saleor.product.models import Product, ProductVariant, Attribute, ProductType, \
@@ -52,6 +53,7 @@ def update_product(product: DaneaProduct, warehouse: str):
         find_and_associate_size(var, variant)
     find_and_associate_color(django_product, product.color)
     find_and_associate_material(django_product, product.material)
+    get_plugins_manager().product_updated(django_product)
 
 
 def store_variant_private_meta(var: ProductVariant, variant: DaneaVariant):
@@ -120,6 +122,7 @@ def generate_product(product: DaneaProduct, warehouse: str):
     find_and_associate_material(persisted_product, product.material)
     insert_product_into_collection(persisted_product, product.collection)
     manage_discounts(persisted_product, product)
+    get_plugins_manager().product_created(persisted_product)
 
 
 def find_warehouse(warehouse: str) -> Warehouse:
