@@ -56,3 +56,15 @@ def get_variant_stock_quantity(variant: ProductVariant) -> int:
         product_variant_id=variant.id,
         warehouse_id=variant.private_metadata.get("warehouse_id")
     ).quantity
+
+
+def get_customer_from_checkout(checkout):
+    return None
+
+
+def get_checkout_total(checkout):
+    return None
+
+
+def get_checkout_lines(checkout):
+    return None

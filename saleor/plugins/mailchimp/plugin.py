@@ -190,25 +190,6 @@ class MailChimpPlugin(BasePlugin):
         except ApiClientError as error:
             logger.error("Error: {}".format(error.text))
 
-    def order_created(self, order: "Order", previous_value: Any):
-        return super().order_created(order, previous_value)
-
-    def order_fully_paid(self, order: "Order", previous_value: Any) -> Any:
-        return super().order_fully_paid(order, previous_value)
-
-    def order_updated(self, order: "Order", previous_value: Any) -> Any:
-        return super().order_updated(order, previous_value)
-
-    def preprocess_order_creation(self, checkout: "Checkout",
-                                  discounts: List["DiscountInfo"], previous_value: Any):
-        return super().preprocess_order_creation(checkout, discounts, previous_value)
-
-    def order_cancelled(self, order: "Order", previous_value: Any) -> Any:
-        return super().order_cancelled(order, previous_value)
-
-    def order_fulfilled(self, order: "Order", previous_value: Any) -> Any:
-        return super().order_fulfilled(order, previous_value)
-
     def customer_created(self, customer: "User", previous_value: Any) -> Any:
         self.client.lists.add_list_member(
             self.configuration["List ID"],
@@ -219,7 +200,17 @@ class MailChimpPlugin(BasePlugin):
         )
 
     def checkout_created(self, checkout: "Checkout", previous_value: Any) -> Any:
-        return super().checkout_created(checkout, previous_value)
+        self.client.ecommerce.add_store_cart(
+            self.configuration["Store ID"],
+            {
+                "id": checkout.id,
+                "currency_code": "eur",
+                "customer": utils.get_customer_from_checkout(checkout),
+                "order_total": utils.get_checkout_total(checkout),
+                "lines": utils.get_checkout_lines(checkout),
+
+            }
+        )
 
     def checkout_updated(self, checkout: "Checkout", previous_value: Any) -> Any:
         return super().checkout_updated(checkout, previous_value)
@@ -227,6 +218,9 @@ class MailChimpPlugin(BasePlugin):
     def checkout_quantity_changed(self, checkout: "Checkout",
                                   previous_value: Any) -> Any:
         return super().checkout_quantity_changed(checkout, previous_value)
+
+    def order_fully_paid(self, order: "Order", previous_value: Any) -> Any:
+        return super().order_fully_paid(order, previous_value)
 
     def full_sync(self):
         for product in Product.objects.all():
