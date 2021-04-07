@@ -12,7 +12,8 @@ from saleor.discount.utils import fetch_discounts
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
 from saleor.plugins.mailchimp import utils
 from saleor.plugins.models import PluginConfiguration
-from saleor.product.models import Product, Attribute, Category, AttributeValue
+from saleor.product.models import Product, Attribute, Category, AttributeValue, \
+    ProductVariant
 
 logger = logging.getLogger(__name__)
 
@@ -97,23 +98,25 @@ class MailChimpPlugin(BasePlugin):
         return super().product_updated(product, previous_value)
 
     def product_created(self, product: "Product", previous_value: Any) -> Any:
-        # TODO make this a celery task
         try:
-            response = self.client.ecommerce.add_store_product(
+            # TODO make this a celery task
+            current_site = Site.objects.get_current()
+            image_array = utils.item_image_link_array(product, current_site)
+            self.client.ecommerce.add_store_product(
                 self.config["Store ID"],
                 {
                     "id": product.id,
-                    "url": self.mailchimp_get_product_url(product),
+                    "url": utils.item_link(
+                        ProductVariant.objects.first(product_id=product.id),
+                        current_site),
                     "title": product.name,
                     "type": product.product_type.name,
-                    "image_url": "",
-                    "images": self.mailchimp_get_product_images_url(product),
-                    "variants": self.mailchimp_get_product_variants_array(product)
+                    "image_url": image_array.pop(),
+                    "variants": utils.mailchimp_get_product_variants_array(product)
                 }
             )
-            print(response)
         except ApiClientError as error:
-            print("Error: {}".format(error.text))
+            logger.error("Error: {}".format(error.text))
 
         return super().product_created(product, previous_value)
 
@@ -135,3 +138,16 @@ class MailChimpPlugin(BasePlugin):
 
     def order_fulfilled(self, order: "Order", previous_value: Any) -> Any:
         return super().order_fulfilled(order, previous_value)
+
+    def customer_created(self, customer: "User", previous_value: Any) -> Any:
+        return super().customer_created(customer, previous_value)
+
+    def checkout_created(self, checkout: "Checkout", previous_value: Any) -> Any:
+        return super().checkout_created(checkout, previous_value)
+
+    def checkout_updated(self, checkout: "Checkout", previous_value: Any) -> Any:
+        return super().checkout_updated(checkout, previous_value)
+
+    def checkout_quantity_changed(self, checkout: "Checkout",
+                                  previous_value: Any) -> Any:
+        return super().checkout_quantity_changed(checkout, previous_value)

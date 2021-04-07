@@ -12,8 +12,10 @@ from saleor.core.taxes import charge_taxes_on_shipping
 from saleor.discount import DiscountInfo
 from saleor.discount.utils import fetch_discounts
 from saleor.plugins.manager import get_plugins_manager
-from saleor.product.models import ProductVariant, Category, Attribute, AttributeValue
+from saleor.product.models import ProductVariant, Category, Attribute, AttributeValue, \
+    Product
 from saleor.warehouse.availability import is_variant_in_stock
+from saleor.warehouse.models import Stock
 
 
 def get_feed_items():
@@ -164,13 +166,11 @@ def item_group_id(item: ProductVariant):
     return str(item.product.pk)
 
 
-def item_image_link(item: ProductVariant, current_site):
-    product_image = item.get_first_image()
-    if product_image:
-        image = product_image.image
-        return add_domain(current_site.domain, image.url, False)
-    return None
-
+def item_image_link_array(item: Product, current_site) -> []:
+    image_array = []
+    for image in item.images:
+        image_array.append(add_domain(current_site.domain, image.url, False))
+    return image_array
 
 def item_link(item: ProductVariant, current_site):
     product_url = item.product.name.replace("-", "")
@@ -191,11 +191,20 @@ def mailchimp_get_product_images_url(self, product: "Product"):
     pass
 
 def mailchimp_get_product_variants_array(product: "Product") -> []:
-    variants = []
-    for variant in product.variants:
+    variants :[ProductVariant] = [ProductVariant]
+    for variant in product.variants :
         variants.append(
-            {"id": variant.id, "title": variant.name}
+            {
+                "id": variant.id,
+                "title" : variant.name,
+                "price" : variant.get_price(),
+                "inventory quantity" : Stock.objects.get(
+                    product_variant_id=variant.id,
+                    warehouse_id=variant.private_metadata.get("warehouse_id")
+                )
+            }
         )
+    return variants
 
 def mailchimp_get_product_url(self, product: "Product"):
     pass

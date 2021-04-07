@@ -58,7 +58,8 @@ def update_product(product: DaneaProduct, warehouse: str):
 
 def store_variant_private_meta(var: ProductVariant, variant: DaneaVariant):
     private_meta = {
-        'original_size': variant.original_size.__str__()
+        'original_size': variant.original_size.__str__(),
+        'warehouse' : variant.warehouse,
     }
     var.store_value_in_private_metadata(items=private_meta)
     var.save()
