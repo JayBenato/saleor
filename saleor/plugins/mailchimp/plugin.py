@@ -200,6 +200,16 @@ class MailChimpPlugin(BasePlugin):
         )
 
     def checkout_created(self, checkout: "Checkout", previous_value: Any) -> Any:
+        user = self.check_if_user_exists(checkout)
+        if not user:
+            user = self.client.ecommerce.add_store_customer(
+                "store_id",
+                {
+                    "id": checkout.user.id,
+                    "email_address": checkout.get_customer_email(),
+                    "opt_in_status": False
+                }
+            )
         self.client.ecommerce.add_store_cart(
             self.configuration["Store ID"],
             {
@@ -211,6 +221,10 @@ class MailChimpPlugin(BasePlugin):
 
             }
         )
+
+    def check_if_user_exists(self,checkout: "CheckOut") -> {}:
+
+
 
     def checkout_updated(self, checkout: "Checkout", previous_value: Any) -> Any:
         return super().checkout_updated(checkout, previous_value)

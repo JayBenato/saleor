@@ -1,4 +1,6 @@
 from django.contrib.syndication.views import add_domain
+
+from saleor.checkout.models import Checkout
 from saleor.product.models import Product, ProductVariant
 from saleor.warehouse.models import Stock
 
@@ -58,8 +60,11 @@ def get_variant_stock_quantity(variant: ProductVariant) -> int:
     ).quantity
 
 
-def get_customer_from_checkout(checkout):
-    return None
+def get_customer_from_checkout(checkout: "Checkout"):
+    return {
+        "email_address" : checkout.get_customer_email(),
+        "id": checkout.
+    }
 
 
 def get_checkout_total(checkout):
