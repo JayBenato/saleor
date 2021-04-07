@@ -49,17 +49,18 @@ def update_product(product: DaneaProduct, warehouse: str):
             else:
                 stock.quantity = 0
             stock.save()
-            store_variant_private_meta(var, variant)
+            store_variant_private_meta(var, variant, warehouse)
         find_and_associate_size(var, variant)
     find_and_associate_color(django_product, product.color)
     find_and_associate_material(django_product, product.material)
     get_plugins_manager().product_updated(django_product)
 
 
-def store_variant_private_meta(var: ProductVariant, variant: DaneaVariant):
+def store_variant_private_meta(var: ProductVariant, variant: DaneaVariant,
+                               warehouse: Warehouse):
     private_meta = {
         'original_size': variant.original_size.__str__(),
-        'warehouse' : variant.warehouse,
+        'warehouse_id': warehouse.id,
     }
     var.store_value_in_private_metadata(items=private_meta)
     var.save()
@@ -118,7 +119,7 @@ def generate_product(product: DaneaProduct, warehouse: str):
                 quantity=0,
             )
         find_and_associate_size(var, variant)
-        store_variant_private_meta(var, variant)
+        store_variant_private_meta(var, variant, warehouse)
     find_and_associate_color(persisted_product, product.color)
     find_and_associate_material(persisted_product, product.material)
     insert_product_into_collection(persisted_product, product.collection)
@@ -188,7 +189,6 @@ def manage_discounts(persisted_product: Product, danea_product: DaneaProduct):
             if CollectionProduct.objects.filter(collection=collection.id,
                                                 product=persisted_product.id).exists():
                 collection.products.remove(persisted_product)
-
 
 # def manage_danea_collections(persisted_product: Product, danea_product: DaneaProduct):
 #     # INV
