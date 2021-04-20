@@ -364,6 +364,15 @@ class BasePlugin:
         """
         return NotImplemented
 
+    def checkout_to_order(self,checkout: "Checkout",order: "Order",
+                          previous_value: Any) -> Any:
+        """Trigger when checkout is converted to Order.
+
+                Overwrite this method if you need to trigger specific logic when a checkout is
+                updated.
+        """
+        return NotImplemented
+
     def fetch_taxes_data(self, previous_value: Any) -> Any:
         """Triggered when ShopFetchTaxRates mutation is called."""
         return NotImplemented

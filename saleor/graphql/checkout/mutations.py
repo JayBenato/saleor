@@ -838,7 +838,8 @@ class CheckoutComplete(BaseMutation):
                 redirect_url=data.get("redirect_url"),
             )
         # If gateway returns information that additional steps are required we need
-        # to inform the frontend and pass all required data
+        # to inform the frontend and pass all required
+        info.context.plugins.checkout_to_order(checkout, order)
         return CheckoutComplete(
             order=order,
             confirmation_needed=action_required,

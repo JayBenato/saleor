@@ -60,16 +60,15 @@ def get_variant_stock_quantity(variant: ProductVariant) -> int:
     ).quantity
 
 
-def get_customer_from_checkout(checkout: "Checkout"):
-    return {
-        "email_address" : checkout.get_customer_email(),
-        "id": checkout.
-    }
-
-
-def get_checkout_total(checkout):
-    return None
-
-
 def get_checkout_lines(checkout):
-    return None
+    variants = []
+    for variant in checkout.resolve_lines():
+        variants.append(
+            {
+                "product_id": variant.product.id,
+                "product_variant_id": variant.id,
+                "price": variant.get_price(),
+                "quantity": variant.quantity
+            }
+        )
+    return variants

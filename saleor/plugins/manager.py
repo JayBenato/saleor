@@ -314,6 +314,11 @@ class PluginsManager(PaymentInterface):
         default_value = None
         return self.__run_method_on_plugins("checkout_updated", default_value, checkout)
 
+    def checkout_to_order(self, checkout : Checkout, order : Order):
+        default_value = None
+        return self.__run_method_on_plugins("checkout_to_order", default_value, checkout
+                                            , order)
+
     def authorize_payment(
         self, gateway: str, payment_information: "PaymentData"
     ) -> "GatewayResponse":

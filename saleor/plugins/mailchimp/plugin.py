@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import pgettext_lazy
 import mailchimp_marketing as MailchimpMarketing
 from mailchimp_marketing.api_client import ApiClientError
+
+from saleor.checkout import calculations
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
 from saleor.plugins.mailchimp import utils
 from saleor.plugins.models import PluginConfiguration
@@ -200,41 +202,84 @@ class MailChimpPlugin(BasePlugin):
         )
 
     def checkout_created(self, checkout: "Checkout", previous_value: Any) -> Any:
-        user = self.check_if_user_exists(checkout)
-        if not user:
-            user = self.client.ecommerce.add_store_customer(
-                "store_id",
-                {
-                    "id": checkout.user.id,
-                    "email_address": checkout.get_customer_email(),
-                    "opt_in_status": False
-                }
-            )
-        self.client.ecommerce.add_store_cart(
-            self.configuration["Store ID"],
-            {
-                "id": checkout.id,
-                "currency_code": "eur",
-                "customer": utils.get_customer_from_checkout(checkout),
-                "order_total": utils.get_checkout_total(checkout),
-                "lines": utils.get_checkout_lines(checkout),
+        user = self.get_or_create_user(checkout)
+        if user:
+            try:
+                response = self.client.ecommerce.add_store_cart(
+                    self.configuration["Store ID"],
+                    {
+                        "id": checkout.id,
+                        "currency_code": "eur",
+                        "customer": user,
+                        "checkout_url": checkout.redirect_url,
+                        "order_total": calculations.checkout_total(
+                            checkout=checkout,
+                            lines=checkout.lines
+                        ),
+                        "lines": utils.get_checkout_lines(checkout),
+                    }
+                )
+                checkout.private_metadata["mailchimp_cart_id"] = response.get("id")
+            except ApiClientError as error:
+                logger.error("Unable to create cart {}", error)
 
-            }
-        )
+    def order_created(self, order: "Order", previous_value: Any):
+        return super().order_created(order, previous_value)
 
-    def check_if_user_exists(self,checkout: "CheckOut") -> {}:
-
-
-
-    def checkout_updated(self, checkout: "Checkout", previous_value: Any) -> Any:
-        return super().checkout_updated(checkout, previous_value)
-
-    def checkout_quantity_changed(self, checkout: "Checkout",
-                                  previous_value: Any) -> Any:
-        return super().checkout_quantity_changed(checkout, previous_value)
+    def checkout_to_order(self, checkout: "Checkout", order: "Order",
+                          previous_value: Any) -> Any:
+        checkout_id = checkout.private_metadata.get("mailchimp_cart_id")
+        order.private_metadata["mailchimp_cart_id"] = checkout_id
+        order.save()
 
     def order_fully_paid(self, order: "Order", previous_value: Any) -> Any:
-        return super().order_fully_paid(order, previous_value)
+        try:
+            self.client.ecommerce.delete_store_cart(
+                self.configuration["Store ID"],
+                order.private_metadata.get("mailchimp_cart_id")
+            )
+        except ApiClientError as error:
+            logger.error("Unable to delete car {}", error)
+
+    def get_or_create_user(self, checkout: "CheckOut") -> {}:
+        try:
+            return self.client.ecommerce.get_store_customer(
+                self.configuration["Store ID"],
+                checkout.user.id
+            )
+        except ApiClientError:
+            try:
+                return self.client.ecommerce.add_store_customer(
+                    self.configuration["Store ID"],
+                    {
+                        "id": checkout.user.id,
+                        "email_address": checkout.get_customer_email(),
+                        "opt_in_status": False
+                    }
+                )
+            except ApiClientError:
+                return None
+
+    def checkout_updated(self, checkout: "CheckOut", previous_value: Any) -> Any:
+        user = self.get_or_create_user(checkout)
+        if user:
+            try:
+                self.client.ecommerce.update_store_cart(
+                    self.configuration["Store ID"],
+                    checkout.private_metadata.get("mailchimp_cart_id"),
+                    {
+                        "currency_code": "eur",
+                        "customer": user,
+                        "order_url": checkout.redirect_url,
+                        "order_total": calculations.checkout_total(
+                            checkout=checkout,
+                            lines=checkout.lines
+                        ),
+                        "lines": utils.get_checkout_lines(checkout),
+                    }
+                )
+            except ApiClientError as error:
+                logger.error("Unable to create cart {}", error)
 
     def full_sync(self):
         for product in Product.objects.all():
