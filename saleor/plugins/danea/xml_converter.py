@@ -5,7 +5,7 @@ import xml.etree.ElementTree as XmlParser
 from saleor.product.models import Product, ProductVariant, AttributeValue
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task, \
-    update_available_products_task
+    update_available_products_task, update_google_feeds_task
 from ..models import DaneaOrder, DaneaCategoryMappings
 from ...order.models import Order
 from ...payment.models import Payment
@@ -48,6 +48,7 @@ def process_product_xml(path) -> []:
         else:
             discarted_products.append(product.name)
     update_available_products_task.delay(danea_product_slugs)
+    update_google_feeds_task.apply_async(countdown=800)
     return discarted_products
 
 

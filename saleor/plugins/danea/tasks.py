@@ -1,6 +1,5 @@
 import decimal
-import json
-
+from ...data_feeds.google_merchant import update_feed
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .product_manager import generate_product, update_product
 from ...celeryconf import app
@@ -33,6 +32,10 @@ def update_available_products_task(product_slugs):
             product.available_for_purchase = None
             product.save()
 
+
+@app.task
+def update_google_feeds_task():
+    update_feed()
 
 def to_danea_product(dictionary) -> DaneaProduct:
     product = DaneaProduct()

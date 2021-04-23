@@ -472,9 +472,10 @@ PLUGINS = [
     "saleor.payment.gateways.braintree.plugin.BraintreeGatewayPlugin",
     "saleor.payment.gateways.razorpay.plugin.RazorpayGatewayPlugin",
     "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
+    "saleor.payment.gateways.ondelivery.plugin.OnDeliveryPlugin",
     "saleor.plugins.invoicing.plugin.InvoicingPlugin",
     "saleor.plugins.danea.plugin.DaneaPlugin",
-    "saleor.payment.gateways.ondelivery.plugin.OnDeliveryPlugin",
+    "saleor.plugins.mailchimp.plugin.MailChimpPlugin"
 ]
 
 # Plugin discovery

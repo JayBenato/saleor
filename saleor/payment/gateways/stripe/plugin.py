@@ -1,7 +1,9 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Any
 
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
+import stripe
 
+from saleor.product.models import Product
 from ..utils import get_supported_currencies
 from . import (
     GatewayConfig,
@@ -10,11 +12,12 @@ from . import (
     list_client_sources,
     process_payment,
     refund,
-    void,
+    void, utils,
 )
+import logging
 
 GATEWAY_NAME = "Stripe"
-
+logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     # flake8: noqa
     from . import GatewayResponse, PaymentData
@@ -40,6 +43,7 @@ class StripeGatewayPlugin(BasePlugin):
         {"name": "Store customers card", "value": False},
         {"name": "Automatic payment capture", "value": True},
         {"name": "Supported currencies", "value": ""},
+        {"name": "Sync Products", "value": True},
     ]
 
     CONFIG_STRUCTURE = {
@@ -56,7 +60,7 @@ class StripeGatewayPlugin(BasePlugin):
         "Store customers card": {
             "type": ConfigurationTypeField.BOOLEAN,
             "help_text": "Determines if Saleor should store cards on payments "
-            "in Stripe customer.",
+                         "in Stripe customer.",
             "label": "Store customers card",
         },
         "Automatic payment capture": {
@@ -67,8 +71,13 @@ class StripeGatewayPlugin(BasePlugin):
         "Supported currencies": {
             "type": ConfigurationTypeField.STRING,
             "help_text": "Determines currencies supported by gateway."
-            " Please enter currency codes separated by a comma.",
+                         " Please enter currency codes separated by a comma.",
             "label": "Supported currencies",
+        },
+        "Sync Products": {
+            "type": ConfigurationTypeField.BOOLEAN,
+            "help_text": "Should plugin sync products",
+            "label": "Sync Products",
         },
     }
 
@@ -85,43 +94,45 @@ class StripeGatewayPlugin(BasePlugin):
             },
             store_customer=configuration["Store customers card"],
         )
+        if configuration["Sync Products"] is True:
+            self.full_product_sync()
 
     def _get_gateway_config(self):
         return self.config
 
     @require_active_plugin
     def authorize_payment(
-        self, payment_information: "PaymentData", previous_value
+            self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
         return authorize(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def capture_payment(
-        self, payment_information: "PaymentData", previous_value
+            self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
         return capture(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def refund_payment(
-        self, payment_information: "PaymentData", previous_value
+            self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
         return refund(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def void_payment(
-        self, payment_information: "PaymentData", previous_value
+            self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
         return void(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def process_payment(
-        self, payment_information: "PaymentData", previous_value
+            self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
         return process_payment(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def list_payment_sources(
-        self, customer_id: str, previous_value
+            self, customer_id: str, previous_value
     ) -> List["CustomerSource"]:
         sources = list_client_sources(self._get_gateway_config(), customer_id)
         previous_value.extend(sources)
@@ -139,3 +150,57 @@ class StripeGatewayPlugin(BasePlugin):
             {"field": "api_key", "value": config.connection_params["public_key"]},
             {"field": "store_customer_card", "value": config.store_customer},
         ]
+
+    def product_created(self, product: "Product", previous_value: Any) -> Any:
+        config = self._get_gateway_config()
+        stripe.api_key = config.connection_params.get("private_key")
+        name = product.private_metadata.get(
+            "rm_code") + " - " + product.private_metadata.get("original_color")
+        stripe.Product.create(
+            id=product.id.__str__(),
+            name=name,
+            images=utils.get_product_images_for_stripe(product),
+            url=utils.get_product_url_for_stripe(product),
+            statement_descriptor=product.category.name.__str__()
+        )
+
+    def product_updated(self, product: "Product", previous_value: Any) -> Any:
+        self.update_or_create_product(product)
+
+    def update_or_create_product(self, product):
+        config = self._get_gateway_config()
+        stripe.api_key = config.connection_params.get("private_key")
+        name = product.private_metadata.get(
+            "rm_code") + " - " + product.private_metadata.get("original_color")
+        statement_desc = product.category.name.__str__().split(" ",1)[0]
+        try:
+            response = stripe.Product.retrieve(product.id.__str__())
+            if response.get("id") == product.id.__str__():
+
+                stripe.Product.modify(
+                    response.get("id"),
+                    name=name,
+                    images=utils.get_product_images_for_stripe(product),
+                    url=utils.get_product_url_for_stripe(product),
+                    statement_descriptor=statement_desc
+                )
+        except:
+            stripe.Product.create(
+                id=product.id.__str__(),
+                name=name,
+                images=utils.get_product_images_for_stripe(product),
+                url=utils.get_product_url_for_stripe(product),
+                statement_descriptor=statement_desc
+            )
+            response = stripe.Price.create(
+                currency="eur",
+                product=product.id.__str__(),
+                unit_amount_decimal=utils.get_product_price(product)
+            )
+            product.private_metadata["stripe_price_id"] = response.get("id")
+
+    def full_product_sync(self):
+        config = self._get_gateway_config()
+        stripe.api_key = config.connection_params.get("private_key")
+        for product in Product.objects.all():
+            self.update_or_create_product(product)

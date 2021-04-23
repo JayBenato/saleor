@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List
+from typing import Any
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.utils.translation import pgettext_lazy
@@ -10,7 +10,7 @@ from saleor.checkout import calculations
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
 from saleor.plugins.mailchimp import utils
 from saleor.plugins.models import PluginConfiguration
-from saleor.product.models import Product, ProductVariant
+from saleor.product.models import Product
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 class MailChimpPlugin(BasePlugin):
     PLUGIN_NAME = "MailChimpPlugin"
     PLUGIN_ID = "todajoia.integration.mailchimp"
+    DEFAULT_CONFIGURATION = [
+        {"name": "API Key", "value": None},
+        {"name": "Server Prefix", "value": None},
+        {"name": "List ID", "value": None},
+        {"name": "Store ID", "value": None},
+        {"name": "Full Sync", "value": False},
+    ]
     CONFIG_STRUCTURE = {
         "API Key": {
             "type": ConfigurationTypeField.STRING,
@@ -31,14 +38,14 @@ class MailChimpPlugin(BasePlugin):
             "help_text": pgettext_lazy(
                 "Plugin help text", "Provide your mail chimp server prefix"
             ),
-            "label": pgettext_lazy("Plugin label", "Password or license"),
+            "label": pgettext_lazy("Plugin label", "Server Prefix"),
         },
         "List ID": {
             "type": ConfigurationTypeField.STRING,
             "help_text": pgettext_lazy(
                 "Plugin help text", "Provide your mail chimp server prefix"
             ),
-            "label": pgettext_lazy("Plugin label", "Password or license"),
+            "label": pgettext_lazy("Plugin label", "List ID"),
         },
         "Store ID": {
             "type": ConfigurationTypeField.STRING,
@@ -50,12 +57,14 @@ class MailChimpPlugin(BasePlugin):
         "Full Sync": {
             "type": ConfigurationTypeField.BOOLEAN,
             "help_text": pgettext_lazy(
-                "Plugin help text", "Should the plugin trigger a full sync on validate"
+                "Plugin help text", "Plugin will trigger a full sync on validate"
             ),
-            "label": pgettext_lazy("Plugin label", "Full Sync on validate"),
+            "label": pgettext_lazy("Plugin label", "Full Sync"),
         },
     }
     client = MailchimpMarketing.Client()
+    store_id = 1
+    list_id = None
 
     @classmethod
     def validate_plugin_configuration(cls, plugin_configuration: "PluginConfiguration"):
@@ -81,6 +90,8 @@ class MailChimpPlugin(BasePlugin):
                 cls.client.ping.get()
                 cls.client.lists.get_list(configuration["List ID"])
                 cls.client.ecommerce.get_store(configuration["Store ID"])
+                cls.store_id = configuration["Store ID"]
+                cls.list_id = configuration["List ID"]
             except ApiClientError as error:
                 logger.error("Error: {}".format(error.text))
                 api_errors.append("Wrong Config : " + error.text)
@@ -94,59 +105,14 @@ class MailChimpPlugin(BasePlugin):
             error_msg = "MailChimp API :"
             raise ValidationError(error_msg + ", ".join(api_errors))
         if configuration["Full Sync"] is True:
-            cls.full_sync()
+            cls.full_sync(cls)
 
-    @classmethod
-    def create_store(cls, configuration):
-        site = Site.objects.get(id=1)
-        response = cls.client.ecommerce.add_store(
-            {
-                "id": site.id,
-                "list_id": configuration["List ID"],
-                "name": site.name,
-                "currency_code": "EUR",
-                "is_syncing": True,
-                "email_address": site.settings.default_mail_sender_address,
-                "money_format": "€",
-                "platform": "saleor",
-                "domain": site.domain,
-                "primary_locale": "it"
-            }
-        )
-        configuration['Store ID'] = response.get("id")
-
-    @classmethod
-    def create_list_audiance(cls, configuration):
-        response = cls.client.lists.create_list(
-            {
-                "name": "name",
-                "permission_reminder": "permission_reminder",
-                "email_type_option": False,
-                "contact":
-                    {
-                        "company": "company",
-                        "address1": "address1",
-                        "city": "city",
-                        "country": "country"
-                    },
-                "campaign_defaults":
-                    {
-                        "from_name": "from_name",
-                        "from_email": "Opal10@gmail.com",
-                        "subject": "subject",
-                        "language": "language"
-                    }
-            }
-        )
-        configuration['Store ID'] = response.get("id")
-
-    # TODO make this a celery task
     def product_updated(self, product: "Product", previous_value: Any) -> Any:
         try:
             current_site = Site.objects.get_current()
             image_array = utils.get_product_images_array(product, current_site)
             self.client.ecommerce.update_store_product(
-                self.configuration["Store ID"],
+                self.store_id,
                 product.id,
                 {
                     "url": utils.get_product_url(product, current_site),
@@ -176,28 +142,31 @@ class MailChimpPlugin(BasePlugin):
         try:
             current_site = Site.objects.get_current()
             image_array = utils.get_product_images_array(product, current_site)
-            self.client.ecommerce.add_store_product(
-                self.configuration["Store ID"],
-                {
-                    "id": product.id,
-                    "url": utils.get_product_url(product, current_site),
-                    "title": product.name,
-                    "handle": product.private_metadata.get("danea_code"),
-                    "type": product.product_type.name,
-                    "image_url": image_array.pop().get("url"),
-                    "images": utils.get_product_images_array(product, current_site),
-                    "variants": utils.get_product_variants_array(product)
-                }
-            )
+            variants_array = utils.get_product_variants_array(product)
+            product_url = utils.get_product_url(product, current_site)
+            if image_array and variants_array and product_url:
+                self.client.ecommerce.add_store_product(
+                    self.store_id,
+                    {
+                        "id": product.id.__str__(),
+                        "url": product_url,
+                        "title": product.name,
+                        "handle": product.private_metadata.get("danea_code"),
+                        "type": product.product_type.name,
+                        "image_url": image_array.pop().get("url"),
+                        "images": image_array,
+                        "variants": variants_array
+                    }
+                )
         except ApiClientError as error:
             logger.error("Error: {}".format(error.text))
 
     def customer_created(self, customer: "User", previous_value: Any) -> Any:
         self.client.lists.add_list_member(
-            self.configuration["List ID"],
+            self.list_id,
             {
                 "email_address": customer.email.__str__(),
-                "status": "cleaned"
+                "status": "subscribed"
             }
         )
 
@@ -206,7 +175,7 @@ class MailChimpPlugin(BasePlugin):
         if user:
             try:
                 response = self.client.ecommerce.add_store_cart(
-                    self.configuration["Store ID"],
+                    self.store_id,
                     {
                         "id": checkout.id,
                         "currency_code": "eur",
@@ -223,9 +192,6 @@ class MailChimpPlugin(BasePlugin):
             except ApiClientError as error:
                 logger.error("Unable to create cart {}", error)
 
-    def order_created(self, order: "Order", previous_value: Any):
-        return super().order_created(order, previous_value)
-
     def checkout_to_order(self, checkout: "Checkout", order: "Order",
                           previous_value: Any) -> Any:
         checkout_id = checkout.private_metadata.get("mailchimp_cart_id")
@@ -235,22 +201,22 @@ class MailChimpPlugin(BasePlugin):
     def order_fully_paid(self, order: "Order", previous_value: Any) -> Any:
         try:
             self.client.ecommerce.delete_store_cart(
-                self.configuration["Store ID"],
+                self.store_id,
                 order.private_metadata.get("mailchimp_cart_id")
             )
         except ApiClientError as error:
-            logger.error("Unable to delete car {}", error)
+            logger.error("Unable to delete cart {}", error)
 
     def get_or_create_user(self, checkout: "CheckOut") -> {}:
         try:
             return self.client.ecommerce.get_store_customer(
-                self.configuration["Store ID"],
+                self.store_id,
                 checkout.user.id
             )
         except ApiClientError:
             try:
                 return self.client.ecommerce.add_store_customer(
-                    self.configuration["Store ID"],
+                    self.store_id,
                     {
                         "id": checkout.user.id,
                         "email_address": checkout.get_customer_email(),
@@ -265,7 +231,7 @@ class MailChimpPlugin(BasePlugin):
         if user:
             try:
                 self.client.ecommerce.update_store_cart(
-                    self.configuration["Store ID"],
+                    self.store_id,
                     checkout.private_metadata.get("mailchimp_cart_id"),
                     {
                         "currency_code": "eur",
@@ -282,22 +248,36 @@ class MailChimpPlugin(BasePlugin):
                 logger.error("Unable to create cart {}", error)
 
     def full_sync(self):
+        self.client.ecommerce.delete_store(self.store_id)
+        self.client.ecommerce.add_store(
+            {
+                "id": self.store_id,
+                "list_id": self.list_id,
+                "name": "TodaJoia Fitness Fashion",
+                "currency_code": "EUR",
+                "platform": "saleor",
+                "email_address": "info@todajoia.com"
+            }
+        )
         for product in Product.objects.all():
             try:
                 current_site = Site.objects.get_current()
                 image_array = utils.get_product_images_array(product, current_site)
-                self.client.ecommerce.add_store_product(
-                    self.configuration["Store ID"],
-                    {
-                        "id": product.id,
-                        "url": utils.get_product_url(product, current_site),
-                        "title": product.name,
-                        "handle": product.private_metadata.get("danea_code"),
-                        "type": product.product_type.name,
-                        "image_url": image_array.pop().get("url"),
-                        "images": utils.get_product_images_array(product, current_site),
-                        "variants": utils.get_product_variants_array(product)
-                    }
-                )
+                variants_array = utils.get_product_variants_array(product)
+                product_url = utils.get_product_url(product, current_site)
+                if image_array and variants_array and product_url:
+                    self.client.ecommerce.add_store_product(
+                        self.store_id,
+                        {
+                            "id": product.id.__str__(),
+                            "url": product_url,
+                            "title": product.name,
+                            "handle": product.private_metadata.get("danea_code"),
+                            "type": product.product_type.name,
+                            "image_url": image_array.pop().get("url"),
+                            "images": image_array,
+                            "variants": variants_array
+                        }
+                    )
             except ApiClientError as error:
                 logger.error("Error: {}".format(error.text))

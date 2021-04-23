@@ -12,18 +12,24 @@ logger = logging.getLogger(__name__)
 class DaneaPlugin(BasePlugin):
     PLUGIN_NAME = "DaneaPlugin"
     PLUGIN_ID = "todajoia.integration.danea"
+    DEFAULT_CONFIGURATION = [
+        {"name": "Update Google Feeds", "value": True},
+        {"name": "Password", "value": None},
+    ]
     CONFIG_STRUCTURE = {
-        "Username or account": {
-            "type": ConfigurationTypeField.STRING,
+        "Update Google Feeds": {
+            "type": ConfigurationTypeField.BOOLEAN,
             "help_text": pgettext_lazy(
-                "Plugin help text", "Provide user or account details"
+                "Plugin help text",
+                "Plugin will update google feeds at every product update"
             ),
-            "label": pgettext_lazy("Plugin label", "Username or account"),
+            "label": pgettext_lazy("Plugin label", "Update Google Feeds"),
         },
-        "Password or license": {
-            "type": ConfigurationTypeField.STRING,
+        "Password": {
+            "type": ConfigurationTypeField.PASSWORD,
             "help_text": pgettext_lazy(
-                "Plugin help text", "Provide password or license details"
+                "Plugin help text",
+                "Provide password or license that validates end-point"
             ),
             "label": pgettext_lazy("Plugin label", "Password or license"),
         }
@@ -35,10 +41,8 @@ class DaneaPlugin(BasePlugin):
         missing_fields = []
         configuration = plugin_configuration.configuration
         configuration = {item["name"]: item["value"] for item in configuration}
-        if not configuration["Username or account"]:
-            missing_fields.append("Username or account")
-        if not configuration["Password or license"]:
-            missing_fields.append("Password or license")
+        if not configuration["Password"]:
+            missing_fields.append("Password")
 
         if plugin_configuration.active and missing_fields:
             error_msg = (
@@ -46,25 +50,6 @@ class DaneaPlugin(BasePlugin):
                 "following fields: "
             )
             raise ValidationError(error_msg + ", ".join(missing_fields))
-
-    @classmethod
-    def _get_default_configuration(cls):
-        defaults = {
-            "name": cls.PLUGIN_NAME,
-            "description": "",
-            "active": True,
-            "configuration": [
-                {
-                    "name": "Username or account",
-                    "value": "",
-                },
-                {
-                    "name": "Password or license",
-                    "value": "",
-                },
-            ]
-        }
-        return defaults
 
     def order_created(self, order: "Order", previous_value: Any):
         DaneaOrder.objects.create(

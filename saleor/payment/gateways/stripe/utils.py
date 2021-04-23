@@ -1,12 +1,15 @@
 from decimal import Decimal
 from typing import Dict
 
+from django.contrib.sites.models import Site
+from django.contrib.syndication.views import add_domain
 from django_countries import countries
 
 # List of zero-decimal currencies
 # Since there is no public API in Stripe backend or helper function
 # in Stripe's Python library, this list is straight out of Stripe's docs
 # https://stripe.com/docs/currencies#zero-decimal
+from saleor.product.models import Product
 from ...interface import AddressData, PaymentData
 
 ZERO_DECIMAL_CURRENCIES = [
@@ -96,3 +99,28 @@ def shipping_to_stripe_dict(shipping: AddressData) -> Dict:
             "country": dict(countries).get(shipping.country, ""),
         },
     }
+
+
+def get_product_images_for_stripe(product: Product) -> []:
+    current_site = Site.objects.get_current()
+    image_array = []
+    for image in product.images.all():
+        image_array.append(
+            add_domain(current_site.domain, image.image.url, False)
+        )
+    return image_array
+
+
+def get_product_url_for_stripe(product):
+    current_site = Site.objects.get_current()
+    product_url = product.name.replace("-", "")
+    product_url = product_url.replace(")", "")
+    product_url = product_url.replace("(", "")
+    product_url = product_url.replace("  ", " ")
+    product_url = product_url.replace(" ", "-")
+    product_url = "/product/" + product_url + "/" + str(product.id) + "/"
+    return add_domain(current_site.domain, product_url, True)
+
+
+def get_product_price(product: Product):
+    return product.minimal_variant_price.amount * 100
