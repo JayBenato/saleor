@@ -1,16 +1,15 @@
 import logging
 from typing import Any
-from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.utils.translation import pgettext_lazy
-import mailchimp_marketing as MailchimpMarketing
-from mailchimp_marketing.api_client import ApiClientError
-
 from saleor.checkout import calculations
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
 from saleor.plugins.mailchimp import utils
 from saleor.plugins.models import PluginConfiguration
 from saleor.product.models import Product
+import mailchimp_marketing as MailchimpMarketing
+from mailchimp_marketing.api_client import ApiClientError
+from saleor.plugins.mailchimp import tasks
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +64,7 @@ class MailChimpPlugin(BasePlugin):
     client = MailchimpMarketing.Client()
     store_id = 1
     list_id = None
+    cfg = {}
 
     @classmethod
     def validate_plugin_configuration(cls, plugin_configuration: "PluginConfiguration"):
@@ -82,6 +82,7 @@ class MailChimpPlugin(BasePlugin):
         if not configuration["Store ID"]:
             missing_fields.append("Store ID")
         if not missing_fields:
+            cls.cfg = configuration
             try:
                 cls.client.set_config({
                     "api_key": configuration["API Key"],
@@ -90,8 +91,6 @@ class MailChimpPlugin(BasePlugin):
                 cls.client.ping.get()
                 cls.client.lists.get_list(configuration["List ID"])
                 cls.client.ecommerce.get_store(configuration["Store ID"])
-                cls.store_id = configuration["Store ID"]
-                cls.list_id = configuration["List ID"]
             except ApiClientError as error:
                 logger.error("Error: {}".format(error.text))
                 api_errors.append("Wrong Config : " + error.text)
@@ -105,69 +104,29 @@ class MailChimpPlugin(BasePlugin):
             error_msg = "MailChimp API :"
             raise ValidationError(error_msg + ", ".join(api_errors))
         if configuration["Full Sync"] is True:
-            cls.full_sync(cls)
+            tasks.mailchimp_full_products_sync(
+                {item["name"]: item["value"] for item in cls.get_plugin_configuration()}
+            )
+            for config in cls.configuration:
+                if config.get('name') == 'Full Sync':
+                    config['value'] = False
 
     def product_updated(self, product: "Product", previous_value: Any) -> Any:
-        try:
-            current_site = Site.objects.get_current()
-            image_array = utils.get_product_images_array(product, current_site)
-            self.client.ecommerce.update_store_product(
-                self.store_id,
-                product.id,
-                {
-                    "url": utils.get_product_url(product, current_site),
-                    "title": product.name,
-                    "handle": product.private_metadata.get("danea_code"),
-                    "type": product.product_type.name,
-                    "image_url": image_array.pop().get("url"),
-                    "images": image_array,
-                    "variants": utils.get_product_variants_array(product)
-                }
-            )
-            for variant in product.variants:
-                self.client.ecommerce.update_product_variant(
-                    self.configuration["Store ID"],
-                    product.id.__str__(),
-                    variant.id.__str__(),
-                    {
-                        "price": variant.get_price(),
-                        "inventory_quantity": utils.get_variant_stock_quantity(variant)
-                    }
-                )
-        except ApiClientError as error:
-            logger.error("Error: {}".format(error.text))
+        tasks.update_mailchimp_product.delay(
+            product.id,
+            {item["name"]: item["value"] for item in self.configuration}
+        )
 
-    # TODO make this a celery task
     def product_created(self, product: "Product", previous_value: Any) -> Any:
-        try:
-            current_site = Site.objects.get_current()
-            image_array = utils.get_product_images_array(product, current_site)
-            variants_array = utils.get_product_variants_array(product)
-            product_url = utils.get_product_url(product, current_site)
-            if image_array and variants_array and product_url:
-                self.client.ecommerce.add_store_product(
-                    self.store_id,
-                    {
-                        "id": product.id.__str__(),
-                        "url": product_url,
-                        "title": product.name,
-                        "handle": product.private_metadata.get("danea_code"),
-                        "type": product.product_type.name,
-                        "image_url": image_array.pop().get("url"),
-                        "images": image_array,
-                        "variants": variants_array
-                    }
-                )
-        except ApiClientError as error:
-            logger.error("Error: {}".format(error.text))
+        tasks.add_mailchimp_product(
+            product.id,
+            {item["name"]: item["value"] for item in self.configuration}
+        )
 
     def customer_created(self, customer: "User", previous_value: Any) -> Any:
-        self.client.lists.add_list_member(
-            self.list_id,
-            {
-                "email_address": customer.email.__str__(),
-                "status": "subscribed"
-            }
+        tasks.create_mailchimp_customer(
+            customer.id,
+            {item["name"]: item["value"] for item in self.configuration}
         )
 
     def checkout_created(self, checkout: "Checkout", previous_value: Any) -> Any:
@@ -246,38 +205,3 @@ class MailChimpPlugin(BasePlugin):
                 )
             except ApiClientError as error:
                 logger.error("Unable to create cart {}", error)
-
-    def full_sync(self):
-        self.client.ecommerce.delete_store(self.store_id)
-        self.client.ecommerce.add_store(
-            {
-                "id": self.store_id,
-                "list_id": self.list_id,
-                "name": "TodaJoia Fitness Fashion",
-                "currency_code": "EUR",
-                "platform": "saleor",
-                "email_address": "info@todajoia.com"
-            }
-        )
-        for product in Product.objects.all():
-            try:
-                current_site = Site.objects.get_current()
-                image_array = utils.get_product_images_array(product, current_site)
-                variants_array = utils.get_product_variants_array(product)
-                product_url = utils.get_product_url(product, current_site)
-                if image_array and variants_array and product_url:
-                    self.client.ecommerce.add_store_product(
-                        self.store_id,
-                        {
-                            "id": product.id.__str__(),
-                            "url": product_url,
-                            "title": product.name,
-                            "handle": product.private_metadata.get("danea_code"),
-                            "type": product.product_type.name,
-                            "image_url": image_array.pop().get("url"),
-                            "images": image_array,
-                            "variants": variants_array
-                        }
-                    )
-            except ApiClientError as error:
-                logger.error("Error: {}".format(error.text))

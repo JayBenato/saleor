@@ -24,6 +24,7 @@ def update_product(product: DaneaProduct, warehouse: str):
     insert_product_into_collection(django_product, product.collection)
     is_product_new(django_product, product.rm_collection)
     manage_discounts(django_product, product)
+    is_stock_positive: bool = False
     for variant in product.variants:
         with transaction.atomic():
             try:
@@ -47,11 +48,17 @@ def update_product(product: DaneaProduct, warehouse: str):
                     product_variant=var,
                 )
             if int(variant.qty) > 0:
+                is_stock_positive = True
                 stock.quantity = variant.qty
             else:
                 stock.quantity = 0
             stock.save()
             store_variant_private_meta(var, variant, warehouse)
+        if is_stock_positive:
+            django_product.is_published = True
+            django_product.visible_in_listings = True
+            django_product.available_for_purchase = datetime.date.today()
+            django_product.save()
         find_and_associate_size(var, variant)
     find_and_associate_color(django_product, product.color)
     find_and_associate_material(django_product, product.material)

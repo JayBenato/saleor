@@ -48,7 +48,7 @@ def process_product_xml(path) -> []:
         else:
             discarted_products.append(product.name)
     update_available_products_task.delay(danea_product_slugs)
-    update_google_feeds_task.apply_async(countdown=800)
+    update_google_feeds_task.apply_async(countdown=8000)
     return discarted_products
 
 

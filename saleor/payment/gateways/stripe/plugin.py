@@ -1,8 +1,6 @@
 from typing import TYPE_CHECKING, List, Any
 
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
-import stripe
-
 from saleor.product.models import Product
 from ..utils import get_supported_currencies
 from . import (
@@ -12,7 +10,7 @@ from . import (
     list_client_sources,
     process_payment,
     refund,
-    void, utils,
+    void, tasks,
 )
 import logging
 
@@ -94,8 +92,6 @@ class StripeGatewayPlugin(BasePlugin):
             },
             store_customer=configuration["Store customers card"],
         )
-        if configuration["Sync Products"] is True:
-            self.full_product_sync()
 
     def _get_gateway_config(self):
         return self.config
@@ -152,55 +148,22 @@ class StripeGatewayPlugin(BasePlugin):
         ]
 
     def product_created(self, product: "Product", previous_value: Any) -> Any:
-        config = self._get_gateway_config()
-        stripe.api_key = config.connection_params.get("private_key")
-        name = product.private_metadata.get(
-            "rm_code") + " - " + product.private_metadata.get("original_color")
-        stripe.Product.create(
-            id=product.id.__str__(),
-            name=name,
-            images=utils.get_product_images_for_stripe(product),
-            url=utils.get_product_url_for_stripe(product),
-            statement_descriptor=product.category.name.__str__()
+        tasks.stripe_create_product.delay(
+            product.id,
+            {item["name"]: item["value"] for item in self.configuration}
         )
 
     def product_updated(self, product: "Product", previous_value: Any) -> Any:
-        self.update_or_create_product(product)
-
-    def update_or_create_product(self, product):
-        config = self._get_gateway_config()
-        stripe.api_key = config.connection_params.get("private_key")
-        name = product.private_metadata.get(
-            "rm_code") + " - " + product.private_metadata.get("original_color")
-        statement_desc = product.category.name.__str__().split(" ",1)[0]
-        try:
-            response = stripe.Product.retrieve(product.id.__str__())
-            if response.get("id") == product.id.__str__():
-
-                stripe.Product.modify(
-                    response.get("id"),
-                    name=name,
-                    images=utils.get_product_images_for_stripe(product),
-                    url=utils.get_product_url_for_stripe(product),
-                    statement_descriptor=statement_desc
-                )
-        except:
-            stripe.Product.create(
-                id=product.id.__str__(),
-                name=name,
-                images=utils.get_product_images_for_stripe(product),
-                url=utils.get_product_url_for_stripe(product),
-                statement_descriptor=statement_desc
-            )
-            response = stripe.Price.create(
-                currency="eur",
-                product=product.id.__str__(),
-                unit_amount_decimal=utils.get_product_price(product)
-            )
-            product.private_metadata["stripe_price_id"] = response.get("id")
+        tasks.stripe_create_or_update_product.delay(
+            product.id,
+            {item["name"]: item["value"] for item in self.configuration}
+        )
 
     def full_product_sync(self):
-        config = self._get_gateway_config()
-        stripe.api_key = config.connection_params.get("private_key")
-        for product in Product.objects.all():
-            self.update_or_create_product(product)
+        tasks.stripe_full_products_sync.delay(
+            {item["name"]: item["value"] for item in self.configuration}
+        )
+        for config in self.configuration:
+            if config.get('name') == 'Sync Products':
+                config['value'] = False
+                self.save_plugin_configuration(self.configuration)
