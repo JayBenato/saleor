@@ -108,6 +108,13 @@ def check_for_errors(product: DaneaProduct) -> bool:
            and product.material is not None
 
 
+def extract_collection_rm_collection(child, product):
+    try :
+        product.rm_collection = child.find("CustomField3").text
+    except:
+        product.rm_collection = None
+
+
 def extract_product(child) -> DaneaProduct:
     product = DaneaProduct()
     extract_name(child, product)
@@ -116,6 +123,7 @@ def extract_product(child) -> DaneaProduct:
     extract_color(child, product)
     extract_material(child, product)
     extract_collection(child, product)
+    extract_collection_rm_collection(child, product)
     return product
 
 

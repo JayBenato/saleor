@@ -4,6 +4,7 @@ from django.db import transaction
 from saleor.discount.models import Sale
 from saleor.plugins.danea.danea_dataclass import DaneaProduct, DaneaVariant
 from saleor.plugins.manager import get_plugins_manager
+from saleor.plugins.models import PluginConfiguration
 from saleor.warehouse.models import Warehouse, Stock
 from saleor.product.utils.attributes import associate_attribute_values_to_instance
 from saleor.product.models import Product, ProductVariant, Attribute, ProductType, \
@@ -21,6 +22,7 @@ def update_product(product: DaneaProduct, warehouse: str):
     django_product.category = Category.objects.get(slug=product.category.lower())
     django_product.save()
     insert_product_into_collection(django_product, product.collection)
+    is_product_new(django_product, product.rm_collection)
     manage_discounts(django_product, product)
     for variant in product.variants:
         with transaction.atomic():
@@ -79,7 +81,9 @@ def store_private_meta(persisted_product, product):
         'web_price': product.web_price,
         'sale_price': product.sale_price,
         'net_price': product.net_price,
-        'internal_id': product.internal_id
+        'internal_id': product.internal_id,
+        'material': product.material,
+        'rm_collection': product.rm_collection
     }
     persisted_product.store_value_in_private_metadata(items=private_meta)
     persisted_product.save()
@@ -123,6 +127,7 @@ def generate_product(product: DaneaProduct, warehouse: str):
     find_and_associate_color(persisted_product, product.color)
     find_and_associate_material(persisted_product, product.material)
     insert_product_into_collection(persisted_product, product.collection)
+    is_product_new(persisted_product, product.rm_collection)
     manage_discounts(persisted_product, product)
     get_plugins_manager().product_created(persisted_product)
 
@@ -190,31 +195,17 @@ def manage_discounts(persisted_product: Product, danea_product: DaneaProduct):
                                                 product=persisted_product.id).exists():
                 collection.products.remove(persisted_product)
 
-# def manage_danea_collections(persisted_product: Product, danea_product: DaneaProduct):
-#     # INV
-#     # V
-#     # AV
-#     year, season = extract_season_and_year(danea_product)
-#
-#
-# def check_latest_collection(year,season):
-#     if not DaneaCollections.objects.filter(year=year,season=season).exists():
-#
-#
-# def extract_season_and_year(product: DaneaProduct):
-#     collection = product.collection
-#     div = product.collection.find('-')
-#     year = ''
-#     season = ''
-#     index = div
-#     if index > -1:
-#         index += 1
-#         while index <= len(collection):
-#             year += collection[index]
-#             index += 1
-#         index = div
-#         index = index - 1
-#         while index > 0:
-#             season += collection[index]
-#             index = index - 1
-#         return year, season
+
+def is_product_new(product: Product,rm_collection):
+    if is_latest_collection(rm_collection):
+        collection = Collection.objects.get(slug='new')
+        collection.products.add(product)
+
+
+def is_latest_collection(rm_collection):
+    # TODO get right collection and
+    plugin_config = PluginConfiguration.objects.get(identifier='danea')
+    latest_collection = plugin_config.get('latest-collection')
+    if rm_collection == latest_collection:
+        return True
+    return False

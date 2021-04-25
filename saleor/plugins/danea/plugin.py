@@ -4,6 +4,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.utils.translation import pgettext_lazy
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
+from saleor.plugins.danea import tasks
 from saleor.plugins.models import PluginConfiguration, DaneaOrder
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ class DaneaPlugin(BasePlugin):
     DEFAULT_CONFIGURATION = [
         {"name": "Update Google Feeds", "value": True},
         {"name": "Password", "value": None},
+        {"name": "Reprocess products", "value": False},
     ]
     CONFIG_STRUCTURE = {
         "Update Google Feeds": {
@@ -56,3 +58,7 @@ class DaneaPlugin(BasePlugin):
             saleor_order_id=order.id
         )
         return previous_value
+
+
+    def reprocess_products(self):
+        tasks.reprocess_products.delay()

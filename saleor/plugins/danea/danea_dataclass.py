@@ -21,6 +21,7 @@ class DaneaProduct:
     category: str
     material: str
     collection: str
+    rm_collection: str
     category: str
     name: str
     color: str
