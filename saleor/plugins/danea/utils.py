@@ -6,7 +6,7 @@ from saleor.product.models import Product, ProductVariant, AttributeValue
 from .danea_dataclass import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task, \
     update_available_products_task, update_google_feeds_task
-from ..models import DaneaOrder, DaneaCategoryMappings
+from ..models import DaneaOrder, DaneaCategoryMappings, DaneaAttributeValuesMappings
 from ...order.models import Order
 from ...payment.models import Payment
 from ...warehouse.models import Warehouse
@@ -48,7 +48,7 @@ def process_product_xml(path) -> []:
         else:
             discarted_products.append(product.name)
     update_available_products_task.delay(danea_product_slugs)
-    update_google_feeds_task.apply_async(countdown=8000)
+    update_google_feeds_task.apply_async(countdown=800)
     return discarted_products
 
 
@@ -63,14 +63,11 @@ def extract_variant(variant):
 
 def parse_size(size: str):
     size = size.lower()
-    if size == 's' or size == 'p':
-        return 's'
-    elif size == 'm':
-        return 'm'
-    elif size == 'l' or size == 'g':
-        return 'l'
-    elif size == 'lg' or size == 'xl' or size == 'gg':
-        return 'xl'
+    if DaneaAttributeValuesMappings.objects.exists(danea_field=size,
+                                                   attribute_type='size'):
+        return DaneaAttributeValuesMappings.objects.get(
+            danea_field=size
+        ).saleor_attribute_value_slug
     else:
         return None
 
@@ -100,19 +97,16 @@ def extract_private_metadata(child, product):
         product.web_price = decimal.Decimal(child.find('GrossPrice6').text)
     except:
         product.web_price = decimal.Decimal(0)
+    try:
+        product.rm_collection = child.find("CustomField3").text
+    except:
+        product.rm_collection = None
 
 
 def check_for_errors(product: DaneaProduct) -> bool:
     return product.type is not None and product.category is not None \
            and product.rm_code is not None and product.color is not None \
            and product.material is not None
-
-
-def extract_collection_rm_collection(child, product):
-    try :
-        product.rm_collection = child.find("CustomField3").text
-    except:
-        product.rm_collection = None
 
 
 def extract_product(child) -> DaneaProduct:
@@ -122,8 +116,6 @@ def extract_product(child) -> DaneaProduct:
     extract_rm_code(child, product)
     extract_color(child, product)
     extract_material(child, product)
-    extract_collection(child, product)
-    extract_collection_rm_collection(child, product)
     return product
 
 
@@ -140,21 +132,6 @@ def extract_material(child, product):
     except:
         product.material = None
         product.name = product.name + "(ERROR: PRODUCT MATERIAL)"
-        logger.error("Unable to parse material")
-
-
-def extract_collection(child, product):
-    product.collection = parse_collection(product.name)
-
-
-def parse_collection(product_name: str):
-    product_name = product_name.lower()
-    if 'reverse' in product_name or 'double' in product_name:
-        return 'reverse'
-    elif 'jeans' in product_name:
-        return 'fake-jeans'
-    else:
-        return 'N'
 
 
 def extract_type_and_category(child, product: DaneaProduct):
@@ -172,51 +149,22 @@ def extract_type_and_category(child, product: DaneaProduct):
 def extract_color(child, product: DaneaProduct):
     product.original_color = child.find('Variants').find('Variant').find(
         'Color').text
-    product.color = parse_color(product.original_color)
-    if product.color is None:
-        product.name = product.name + "(ERROR: PRODUCT COLOR)"
-        logger.error("Unable to parse color")
-
-
-def parse_color(color: str):
-    color = color.lower()
-    if color.startswith('dg') or color.startswith('sb') or color.startswith('es'):
-        return 'multicolor'
-    elif color.startswith('pt') or color.startswith('01'):
-        return 'black'
-    elif color.startswith('vm'):
-        return 'red'
-    elif color.startswith('vd'):
-        return 'green'
-    elif color.startswith('az'):
-        return 'blue'
-    elif color.startswith('lj'):
-        return 'orange'
-    elif color.startswith('bc'):
-        return 'white'
-    elif color.startswith('rs'):
-        return 'pink'
-    elif color.startswith('bd') or color.startswith('rx'):
-        return 'bordeaux'
-    elif color.startswith('me') or color.startswith('cz'):
-        return 'grey'
-    elif color.startswith('mr'):
-        return 'brown'
-    elif color.startswith('am'):
-        return 'yellow'
-    elif color.startswith('fr'):
-        return 'rust'
+    color = product.original_color[:2].lower()
+    if DaneaAttributeValuesMappings.objects.exists(danea_field=color):
+        return DaneaAttributeValuesMappings.objects.get(
+            danea_field=color[:2]
+        ).saleor_attribute_value_slug
     else:
-        return None
+        product.name = product.name + "(ERROR: PRODUCT COLOR)"
 
 
 def extract_rm_code(child, product: DaneaProduct):
-    product.rm_code = parse_code(product.name)
+    product.rm_code = get_rm_code_from_product_name(product.name)
     if product.rm_code is None:
         product.name = product.name + "(ERROR: RMCODE)"
 
 
-def parse_code(product_name: str):
+def get_rm_code_from_product_name(product_name: str):
     index = product_name.find('(')
     code = ''
     if index > -1:
@@ -253,7 +201,8 @@ def process_order(order: Order):
     document.find('CustomerCity').text = order.shipping_address.city
     document.find('CustomerProvince').text = order.shipping_address.country_area
     document.find('CustomerCountry').text = order.shipping_address.country.__str__()
-    document.find('PaymentName').text = extract_payment_method(order.get_last_payment().gateway.__str__())
+    document.find('PaymentName').text = extract_payment_method(
+        order.get_last_payment().gateway.__str__())
     document.find('DocumentType').text = 'C'
     document.find(
         'Warehouse').text = '02 PRINCIPALE'  # TODO implemenort warehouse search
@@ -314,6 +263,9 @@ def extract_payment_method(gateway):
         return 'Contrassegno'
     if gateway == 'mirumee.payments.braintree':
         return 'Braintree'
+    if gateway == 'mirumee.payments.stripe':
+        return 'Stripe'
+
 
 def generate_file():
     element = XmlParser.Element(

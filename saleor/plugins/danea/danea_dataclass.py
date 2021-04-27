@@ -20,7 +20,6 @@ class DaneaProduct:
     type: str
     category: str
     material: str
-    collection: str
     rm_collection: str
     category: str
     name: str

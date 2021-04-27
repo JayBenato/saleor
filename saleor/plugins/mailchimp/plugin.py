@@ -107,9 +107,10 @@ class MailChimpPlugin(BasePlugin):
             tasks.mailchimp_full_products_sync(
                 {item["name"]: item["value"] for item in cls.get_plugin_configuration()}
             )
-            for config in cls.configuration:
-                if config.get('name') == 'Full Sync':
-                    config['value'] = False
+            for config in plugin_configuration.configuration:
+                if config["name"] == "Full Sync":
+                    config["value"] = False
+
 
     def product_updated(self, product: "Product", previous_value: Any) -> Any:
         tasks.update_mailchimp_product.delay(

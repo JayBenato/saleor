@@ -159,11 +159,11 @@ class StripeGatewayPlugin(BasePlugin):
             {item["name"]: item["value"] for item in self.configuration}
         )
 
-    def full_product_sync(self):
-        tasks.stripe_full_products_sync.delay(
-            {item["name"]: item["value"] for item in self.configuration}
-        )
-        for config in self.configuration:
-            if config.get('name') == 'Sync Products':
-                config['value'] = False
-                self.save_plugin_configuration(self.configuration)
+    @classmethod
+    def validate_plugin_configuration(cls, plugin_configuration: "PluginConfiguration"):
+        configuration = {item["name"]: item["value"] for item in plugin_configuration.configuration}
+        if configuration["Sync Products"] is True:
+            tasks.stripe_full_products_sync.delay(configuration)
+            for config in plugin_configuration.configuration:
+                if config["name"] == "Sync Products":
+                    config["value"] = False

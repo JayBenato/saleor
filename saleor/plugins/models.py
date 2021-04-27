@@ -31,6 +31,17 @@ class DaneaCategoryMappings(models.Model):
     saleor_type_slug = models.CharField(max_length=250)
 
 
-class DaneaCollections(models.Model):
-    season = models.CharField(max_length=250)
-    year = models.IntegerField()
+class DaneaAttributeMappings(models.Model):
+    danea_field = models.CharField(max_length=250, unique=True)
+    saleor_attribute_slug = models.CharField(max_length=250, unique=True)
+
+
+class DaneaAttributeValuesMappings(models.Model):
+    attribute_type = models.CharField(max_length=128)
+    danea_field = models.CharField(max_length=250, unique=True)
+    saleor_attribute_value_slug = models.CharField(max_length=250)
+
+
+class DaneaCollectionsMappings(models.Model):
+    keyword = models.CharField(max_length=128)
+    saleor_collection_slug = models.CharField(max_length=128)
