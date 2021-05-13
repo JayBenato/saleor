@@ -151,7 +151,7 @@ def authorize(
             last_4=credit_card.get("last_4"),
             exp_year=credit_card.get("expiration_year"),
             exp_month=credit_card.get("expiration_month"),
-            brand=credit_card.get("card_type", "").lower(),
+            brand=credit_card.get("card_type", "").lower() if credit_card.get("card_type", "") else "",
             name=credit_card.get("cardholder_name"),
             type="card",
         ),

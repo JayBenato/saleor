@@ -1,12 +1,14 @@
 import decimal
 import datetime
+
+from . import DaneaProduct, DaneaVariant
 from ...data_feeds.google_merchant import update_feed
 from ...celeryconf import app
 from django.db import transaction
 from saleor.discount.models import Sale
-from saleor.plugins.danea.danea_dataclass import DaneaProduct, DaneaVariant
 from saleor.plugins.manager import get_plugins_manager
-from saleor.plugins.models import PluginConfiguration, DaneaCollectionsMappings
+from saleor.plugins.models import PluginConfiguration, DaneaCollectionsMappings, \
+    DaneaAttributeValuesMappings
 from saleor.warehouse.models import Warehouse, Stock
 from saleor.product.utils.attributes import associate_attribute_values_to_instance
 from saleor.product.models import Product, ProductVariant, Attribute, ProductType, \
@@ -29,6 +31,8 @@ def generate_product_task(product, warehouse):
         visible_in_listings=True,
     )
     store_private_meta(persisted_product, product)
+    default_variant_qty = 0
+    default_variant = None
     for variant in product.variants:
         var = ProductVariant.objects.create(
             product=persisted_product,
@@ -42,6 +46,9 @@ def generate_product_task(product, warehouse):
                 product_variant=var,
                 quantity=variant.qty,
             )
+            if default_variant_qty < variant.qty:
+                default_variant = variant
+                default_variant_qty = variant.qty
         else:
             Stock.objects.create(
                 warehouse=warehouse,
@@ -50,6 +57,7 @@ def generate_product_task(product, warehouse):
             )
         find_and_associate_size(var, variant)
         store_variant_private_meta(var, variant, warehouse)
+    set_default_variant(default_variant, persisted_product)
     find_and_associate_color(persisted_product, product.color)
     find_and_associate_material(persisted_product, product.material)
     insert_product_into_matching_collections(persisted_product)
@@ -71,6 +79,8 @@ def update_product_task(product, warehouse):
     django_product.category = Category.objects.get(slug=product.category.lower())
     django_product.save()
     is_stock_positive: bool = False
+    default_variant_qty = 0
+    default_variant = None
     for variant in product.variants:
         with transaction.atomic():
             try:
@@ -96,6 +106,9 @@ def update_product_task(product, warehouse):
             if int(variant.qty) > 0:
                 is_stock_positive = True
                 stock.quantity = variant.qty
+                if default_variant_qty < variant.qty:
+                    default_variant = variant
+                    default_variant_qty = variant.qty
             else:
                 stock.quantity = 0
             stock.save()
@@ -106,6 +119,7 @@ def update_product_task(product, warehouse):
             django_product.available_for_purchase = datetime.date.today()
             django_product.save()
         find_and_associate_size(var, variant)
+    set_default_variant(default_variant, django_product)
     find_and_associate_color(django_product, product.color)
     find_and_associate_material(django_product, product.material)
     insert_product_into_matching_collections(django_product)
@@ -136,7 +150,7 @@ def update_google_feeds_task():
 
 @app.task
 def reprocess_product_attributes(id):
-    product = Product.objects.get(id=id)
+    product: Product = Product.objects.get(id=id)
     color = product.private_metadata.get("original_color")
     material = product.private_metadata.get("material")
     collection = product.private_metadata.get("collection")
@@ -145,6 +159,10 @@ def reprocess_product_attributes(id):
     if category:
         find_and_associate_category(product, category)
     if color:
+        color = color[:2].lower()
+        color = DaneaAttributeValuesMappings.objects.get(
+            danea_field=color
+        ).saleor_attribute_value_slug
         find_and_associate_color(product, color)
     if material:
         find_and_associate_material(product, material)
@@ -152,6 +170,19 @@ def reprocess_product_attributes(id):
         insert_product_into_matching_collections(product)
     if rm_collection:
         check_and_add_product_to_new_collection(product, rm_collection)
+    variant_qty = 0
+    default_variant = None
+    # TODO find a way to get correct warehouse
+    warehouse = find_warehouse('02 principale')
+    for variant in product.variants.filter(product=product.id):
+        stock = Stock.objects.get(
+            product_variant_id=variant.id,
+            warehouse_id=warehouse.id
+        )
+        if stock.quantity > variant_qty:
+            variant_qty = stock.quantity
+            default_variant = variant
+    set_default_variant(default_variant, product)
 
 
 @app.task
@@ -300,3 +331,9 @@ def to_danea_product(dictionary) -> DaneaProduct:
         variant.original_size = var.get('original_size')
         product.variants.append(variant)
     return product
+
+
+def set_default_variant(variant: ProductVariant, product: Product):
+    if variant is not None:
+        product.default_variant = variant
+        product.save()

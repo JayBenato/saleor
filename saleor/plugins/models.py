@@ -37,7 +37,7 @@ class DaneaAttributeMappings(models.Model):
 
 
 class DaneaAttributeValuesMappings(models.Model):
-    attribute_type = models.CharField(max_length=128)
+    attribute_type = models.CharField(max_length=128, default="")
     danea_field = models.CharField(max_length=250, unique=True)
     saleor_attribute_value_slug = models.CharField(max_length=250)
 

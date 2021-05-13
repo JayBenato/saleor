@@ -463,15 +463,16 @@ GRAPHENE = {
 PLUGINS_MANAGER = "saleor.plugins.manager.PluginsManager"
 
 PLUGINS = [
-    "saleor.plugins.avatax.plugin.AvataxPlugin",
-    "saleor.plugins.vatlayer.plugin.VatlayerPlugin",
+    # "saleor.plugins.avatax.plugin.AvataxPlugin",
+    # "saleor.plugins.vatlayer.plugin.VatlayerPlugin",
     "saleor.plugins.webhook.plugin.WebhookPlugin",
-    "saleor.payment.gateways.dummy.plugin.DummyGatewayPlugin",
-    "saleor.payment.gateways.dummy_credit_card.plugin.DummyCreditCardGatewayPlugin",
+    # "saleor.payment.gateways.dummy.plugin.DummyGatewayPlugin",
+    # "saleor.payment.gateways.dummy_credit_card.plugin.DummyCreditCardGatewayPlugin",
     "saleor.payment.gateways.stripe.plugin.StripeGatewayPlugin",
+    # "saleor.payment.gateways.paypal.plugin.PaypalGatewayPlugin",
     "saleor.payment.gateways.braintree.plugin.BraintreeGatewayPlugin",
-    "saleor.payment.gateways.razorpay.plugin.RazorpayGatewayPlugin",
-    "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
+    # "saleor.payment.gateways.razorpay.plugin.RazorpayGatewayPlugin",
+    # "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
     "saleor.payment.gateways.ondelivery.plugin.OnDeliveryPlugin",
     "saleor.plugins.invoicing.plugin.InvoicingPlugin",
     "saleor.plugins.danea.plugin.DaneaPlugin",

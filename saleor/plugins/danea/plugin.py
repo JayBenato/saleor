@@ -57,7 +57,6 @@ class DaneaPlugin(BasePlugin):
         configuration = {item["name"]: item["value"] for item in configuration}
         if not configuration["Password"]:
             missing_fields.append("Password")
-
         if plugin_configuration.active and missing_fields:
             error_msg = (
                 "To enable a plugin, you need to provide values for the "
@@ -70,7 +69,6 @@ class DaneaPlugin(BasePlugin):
             for config in plugin_configuration.configuration:
                 if config["name"] == "Reprocess Products Attributes":
                     config["value"] = False
-
 
     def order_created(self, order: "Order", previous_value: Any):
         DaneaOrder.objects.create(

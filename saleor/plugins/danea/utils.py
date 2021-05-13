@@ -3,7 +3,7 @@ import decimal
 import logging
 import xml.etree.ElementTree as XmlParser
 from saleor.product.models import Product, ProductVariant, AttributeValue
-from .danea_dataclass import DaneaProduct, DaneaVariant
+from . import DaneaProduct, DaneaVariant
 from .tasks import generate_product_task, update_product_task, \
     update_available_products_task, update_google_feeds_task
 from ..models import DaneaOrder, DaneaCategoryMappings, DaneaAttributeValuesMappings
