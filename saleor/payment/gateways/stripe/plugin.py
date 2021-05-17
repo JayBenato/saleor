@@ -1,7 +1,6 @@
-from typing import TYPE_CHECKING, List, Any
+from typing import TYPE_CHECKING, List
 
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
-from saleor.product.models import Product
 from ..utils import get_supported_currencies
 from . import (
     GatewayConfig,
@@ -10,7 +9,7 @@ from . import (
     list_client_sources,
     process_payment,
     refund,
-    void, tasks,
+    void,
 )
 import logging
 
@@ -41,7 +40,6 @@ class StripeGatewayPlugin(BasePlugin):
         {"name": "Store customers card", "value": False},
         {"name": "Automatic payment capture", "value": True},
         {"name": "Supported currencies", "value": ""},
-        {"name": "Sync Products", "value": True},
     ]
 
     CONFIG_STRUCTURE = {
@@ -71,11 +69,6 @@ class StripeGatewayPlugin(BasePlugin):
             "help_text": "Determines currencies supported by gateway."
                          " Please enter currency codes separated by a comma.",
             "label": "Supported currencies",
-        },
-        "Sync Products": {
-            "type": ConfigurationTypeField.BOOLEAN,
-            "help_text": "Should plugin sync products",
-            "label": "Sync Products",
         },
     }
 
@@ -146,24 +139,3 @@ class StripeGatewayPlugin(BasePlugin):
             {"field": "api_key", "value": config.connection_params["public_key"]},
             {"field": "store_customer_card", "value": config.store_customer},
         ]
-
-    def product_created(self, product: "Product", previous_value: Any) -> Any:
-        tasks.stripe_create_product.delay(
-            product.id,
-            {item["name"]: item["value"] for item in self.configuration}
-        )
-
-    def product_updated(self, product: "Product", previous_value: Any) -> Any:
-        tasks.stripe_create_or_update_product.delay(
-            product.id,
-            {item["name"]: item["value"] for item in self.configuration}
-        )
-
-    @classmethod
-    def validate_plugin_configuration(cls, plugin_configuration: "PluginConfiguration"):
-        configuration = {item["name"]: item["value"] for item in plugin_configuration.configuration}
-        if configuration["Sync Products"] is True:
-            tasks.stripe_full_products_sync.delay(configuration)
-            for config in plugin_configuration.configuration:
-                if config["name"] == "Sync Products":
-                    config["value"] = False

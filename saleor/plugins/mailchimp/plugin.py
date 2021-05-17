@@ -104,8 +104,8 @@ class MailChimpPlugin(BasePlugin):
             error_msg = "MailChimp API :"
             raise ValidationError(error_msg + ", ".join(api_errors))
         if configuration["Full Sync"] is True:
-            tasks.mailchimp_full_products_sync(
-                {item["name"]: item["value"] for item in cls.get_plugin_configuration()}
+            tasks.mailchimp_full_products_sync.delay(
+                {item["name"]: item["value"] for item in plugin_configuration.configuration}
             )
             for config in plugin_configuration.configuration:
                 if config["name"] == "Full Sync":

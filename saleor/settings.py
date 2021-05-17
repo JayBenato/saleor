@@ -470,13 +470,14 @@ PLUGINS = [
     # "saleor.payment.gateways.dummy_credit_card.plugin.DummyCreditCardGatewayPlugin",
     "saleor.payment.gateways.stripe.plugin.StripeGatewayPlugin",
     # "saleor.payment.gateways.paypal.plugin.PaypalGatewayPlugin",
-    "saleor.payment.gateways.braintree.plugin.BraintreeGatewayPlugin",
+    # "saleor.payment.gateways.braintree.plugin.BraintreeGatewayPlugin",
     # "saleor.payment.gateways.razorpay.plugin.RazorpayGatewayPlugin",
     # "saleor.payment.gateways.adyen.plugin.AdyenGatewayPlugin",
     "saleor.payment.gateways.ondelivery.plugin.OnDeliveryPlugin",
     "saleor.plugins.invoicing.plugin.InvoicingPlugin",
     "saleor.plugins.danea.plugin.DaneaPlugin",
-    "saleor.plugins.mailchimp.plugin.MailChimpPlugin"
+    "saleor.plugins.mailchimp.plugin.MailChimpPlugin",
+    "saleor.plugins.stripe_products.plugin.StripeProducts"
 ]
 
 # Plugin discovery

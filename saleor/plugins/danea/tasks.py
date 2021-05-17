@@ -184,11 +184,11 @@ def reprocess_product_attributes(id):
             default_variant = variant
     set_default_variant(default_variant, product)
 
-
-@app.task
+@app.task()
 def reprocess_products_attributes():
     for product in Product.objects.all():
-        reprocess_product_attributes.delay(product.id.__str__())
+        if product.id:
+            reprocess_product_attributes.delay(product.id.__str__())
 
 
 def manage_discounts(persisted_product: Product, danea_product: DaneaProduct):

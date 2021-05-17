@@ -64,7 +64,7 @@ class DaneaPlugin(BasePlugin):
             )
             raise ValidationError(error_msg + ", ".join(missing_fields))
         if configuration["Reprocess Products Attributes"] is True:
-            tasks.reprocess_products_attributes().delay()
+            tasks.reprocess_products_attributes.delay()
             tasks.update_google_feeds_task.apply_async(countdown=800)
             for config in plugin_configuration.configuration:
                 if config["name"] == "Reprocess Products Attributes":
